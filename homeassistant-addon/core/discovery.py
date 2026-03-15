@@ -1,0 +1,143 @@
+"""
+Discovery engine — queries the HA Supervisor API at startup to find
+which addons are installed and running, then maps them to plugins.
+
+For each running addon it:
+1. Gets the addon info (network, hostname, ports)
+2. Resolves the actual configured port (may differ from default)
+3. Returns a PluginConfig with the correct URL
+"""
+
+import os
+import httpx
+import logging
+import importlib
+import pkgutil
+import inspect
+from typing import Dict, List, Optional, Type
+
+from core.plugin_base import BasePlugin, PluginConfig
+
+log = logging.getLogger("ha-mcp-plus.discovery")
+
+SUPERVISOR_URL = "http://supervisor"
+
+
+def _supervisor_token() -> str:
+    return os.environ.get("SUPERVISOR_TOKEN", "")
+
+
+def _headers() -> dict:
+    return {
+        "Authorization": f"Bearer {_supervisor_token()}",
+        "Content-Type": "application/json",
+    }
+
+
+def get_addon_info(slug: str) -> Optional[dict]:
+    """Fetch addon info from Supervisor API. Returns None if not found/running."""
+    try:
+        r = httpx.get(
+            f"{SUPERVISOR_URL}/addons/{slug}/info",
+            headers=_headers(),
+            timeout=5,
+        )
+        if r.status_code == 200:
+            return r.json().get("data", {})
+        return None
+    except Exception as e:
+        log.debug(f"Could not fetch addon info for {slug}: {e}")
+        return None
+
+
+def discover_addon_url(slug: str, internal_port: int) -> Optional[str]:
+    """
+    Given an addon slug and its internal port, return the URL to reach it.
+
+    HA addon hostnames are derived from the slug: replace _ with - and strip
+    the repository prefix separator.
+    e.g. a0d7b954_influxdb → a0d7b954-influxdb
+
+    The actual port may differ from internal_port if the user configured a
+    custom host port mapping.
+    """
+    info = get_addon_info(slug)
+    if not info:
+        return None
+
+    state = info.get("state", "")
+    if state != "started":
+        log.info(f"Addon {slug} found but not running (state={state}), skipping")
+        return None
+
+    # Hostname: slug with underscores → dashes
+    hostname = slug.replace("_", "-")
+
+    # Resolve actual port from network config
+    # Supervisor returns network as {"8086/tcp": 8086} or {"8086/tcp": null} for host-network
+    network = info.get("network", {}) or {}
+    port_key = f"{internal_port}/tcp"
+    mapped_port = network.get(port_key)
+
+    # If mapped_port is None, addon uses host network or no port mapping → use internal
+    port = mapped_port if mapped_port else internal_port
+
+    url = f"http://{hostname}:{port}"
+    log.info(f"Discovered {slug} → {url}")
+    return url
+
+
+def load_all_plugins() -> List[Type[BasePlugin]]:
+    """
+    Auto-discover all plugin classes in the plugins/ directory.
+    Any class that subclasses BasePlugin is automatically found.
+    """
+    import plugins as plugins_pkg
+
+    classes = []
+    for _, module_name, _ in pkgutil.iter_modules(plugins_pkg.__path__):
+        module = importlib.import_module(f"plugins.{module_name}")
+        for name, obj in inspect.getmembers(module, inspect.isclass):
+            if (
+                issubclass(obj, BasePlugin)
+                and obj is not BasePlugin
+                and obj.ADDON_SLUG  # must have a slug
+            ):
+                classes.append(obj)
+                log.debug(f"Found plugin class: {name} (slug={obj.ADDON_SLUG})")
+
+    return classes
+
+
+def discover_and_load_plugins(addon_options: dict) -> Dict[str, tuple]:
+    """
+    Main entry point: discover all plugin classes, check which addons
+    are running, build PluginConfig for each, and return active plugins.
+
+    Returns:
+        Dict[plugin_name → (plugin_instance, PluginConfig)]
+    """
+    plugin_classes = load_all_plugins()
+    active = {}
+
+    for cls in plugin_classes:
+        log.info(f"Checking plugin {cls.NAME} (addon={cls.ADDON_SLUG})...")
+
+        url = discover_addon_url(cls.ADDON_SLUG, cls.INTERNAL_PORT)
+        if not url:
+            log.info(f"  → {cls.NAME}: addon not found or not running, skipping")
+            continue
+
+        token = addon_options.get(cls.CONFIG_KEY, "") if cls.CONFIG_KEY else ""
+
+        cfg = PluginConfig(
+            url=url,
+            token=token,
+            extra={k: v for k, v in addon_options.items()},
+        )
+
+        instance = cls()
+        active[cls.NAME] = (instance, cfg)
+        log.info(f"  → {cls.NAME}: ACTIVE at {url}")
+
+    return active
