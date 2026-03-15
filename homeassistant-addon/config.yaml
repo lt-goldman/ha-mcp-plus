@@ -1,0 +1,53 @@
+name: "HA MCP Plus"
+description: >
+  Extended MCP server for AI assistants (Claude, etc.).
+  Automatically detects installed addons (InfluxDB, Grafana, Node-RED,
+  Frigate, ESPHome) and activates the corresponding tools.
+  No URL configuration needed — everything is auto-discovered.
+version: "0.2.0"
+slug: "ha_mcp_plus"
+init: false
+
+homeassistant_api: true
+hassio_api: true
+hassio_role: manager
+auth_api: true
+
+map:
+  - config:rw
+
+ports:
+  9583/tcp: 9583
+
+ports_description:
+  9583/tcp: "MCP Server endpoint (connect from Claude.ai)"
+
+# ─────────────────────────────────────────────────────────────
+# Configuration — URLs are auto-discovered from the Supervisor.
+# Only fill in tokens for addons that require authentication.
+# Leave empty if the addon uses anonymous access.
+# ─────────────────────────────────────────────────────────────
+schema:
+  mcp_secret_path: str
+
+  # InfluxDB — only needed if InfluxDB auth is enabled
+  influx_token: str?
+  influx_org: str?
+  influx_bucket: str?
+
+  # Grafana — only needed if Grafana auth is enabled (not anonymous)
+  grafana_token: str?
+
+  # Node-RED — only needed if Node-RED auth is enabled
+  nodered_token: str?
+
+  log_level: list(trace|debug|info|notice|warning|error|fatal)?
+
+options:
+  mcp_secret_path: "/mcp"
+  influx_token: ""
+  influx_org: "homeassistant"
+  influx_bucket: "homeassistant"
+  grafana_token: ""
+  nodered_token: ""
+  log_level: "info"
