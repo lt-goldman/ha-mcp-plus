@@ -1,0 +1,72 @@
+"""
+ha-mcp-plus — Extended Home Assistant MCP Server
+Adds: Filesystem, InfluxDB, Grafana, Node-RED, Frigate, Supervisor tools
+MIT License
+"""
+
+import os
+import logging
+from mcp.server.fastmcp import FastMCP
+
+from tools.filesystem import register_filesystem_tools
+from tools.influxdb import register_influxdb_tools
+from tools.grafana import register_grafana_tools
+from tools.nodered import register_nodered_tools
+from tools.frigate import register_frigate_tools
+from tools.supervisor import register_supervisor_tools
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("ha-mcp-plus")
+
+# --- Config from environment ---
+HA_URL        = os.environ.get("HA_URL", "http://supervisor/core")
+HA_TOKEN      = os.environ.get("HA_TOKEN", os.environ.get("SUPERVISOR_TOKEN", ""))
+INFLUX_URL    = os.environ.get("INFLUX_URL", "http://localhost:8086")
+INFLUX_TOKEN  = os.environ.get("INFLUX_TOKEN", "")
+INFLUX_ORG    = os.environ.get("INFLUX_ORG", "homeassistant")
+INFLUX_BUCKET = os.environ.get("INFLUX_BUCKET", "homeassistant")
+GRAFANA_URL   = os.environ.get("GRAFANA_URL", "http://localhost:3000")
+GRAFANA_TOKEN = os.environ.get("GRAFANA_TOKEN", "")
+NODERED_URL   = os.environ.get("NODERED_URL", "http://localhost:1880")
+NODERED_TOKEN = os.environ.get("NODERED_TOKEN", "")
+FRIGATE_URL   = os.environ.get("FRIGATE_URL", "http://localhost:5000")
+CONFIG_PATH   = os.environ.get("CONFIG_PATH", "/config")
+MCP_PORT      = int(os.environ.get("MCP_PORT", "9583"))
+MCP_SECRET    = os.environ.get("MCP_SECRET_PATH", "/mcp")
+
+mcp = FastMCP(
+    "ha-mcp-plus",
+    instructions="""
+    Extended Home Assistant MCP server.
+    Provides tools for: filesystem config editing, InfluxDB queries,
+    Grafana dashboard/panel creation, Node-RED flow management,
+    Frigate camera/event access, and HA Supervisor addon control.
+    Always ask for user confirmation before writing files or deploying flows.
+    """,
+)
+
+ctx = {
+    "ha_url":        HA_URL,
+    "ha_token":      HA_TOKEN,
+    "influx_url":    INFLUX_URL,
+    "influx_token":  INFLUX_TOKEN,
+    "influx_org":    INFLUX_ORG,
+    "influx_bucket": INFLUX_BUCKET,
+    "grafana_url":   GRAFANA_URL,
+    "grafana_token": GRAFANA_TOKEN,
+    "nodered_url":   NODERED_URL,
+    "nodered_token": NODERED_TOKEN,
+    "frigate_url":   FRIGATE_URL,
+    "config_path":   CONFIG_PATH,
+}
+
+register_filesystem_tools(mcp, ctx)
+register_influxdb_tools(mcp, ctx)
+register_grafana_tools(mcp, ctx)
+register_nodered_tools(mcp, ctx)
+register_frigate_tools(mcp, ctx)
+register_supervisor_tools(mcp, ctx)
+
+if __name__ == "__main__":
+    log.info(f"Starting ha-mcp-plus on port {MCP_PORT} at {MCP_SECRET}")
+    mcp.run(transport="streamable-http", host="0.0.0.0", port=MCP_PORT, path=MCP_SECRET)

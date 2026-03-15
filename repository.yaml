@@ -1,0 +1,111 @@
+"""
+Supervisor tools — control HA add-ons, check config, restart HA.
+Uses the HA Supervisor internal API (only available inside the addon container).
+"""
+
+import httpx
+from typing import Optional
+
+
+def register_supervisor_tools(mcp, ctx: dict):
+
+    supervisor_url = "http://supervisor"
+    ha_token       = ctx["ha_token"]
+
+    def _headers():
+        return {"Authorization": f"Bearer {ha_token}", "Content-Type": "application/json"}
+
+    def _sup(method: str, path: str, json: dict = None) -> dict:
+        try:
+            r = httpx.request(method, f"{supervisor_url}{path}", headers=_headers(), json=json, timeout=30)
+            data = r.json()
+            return data.get("data", data)
+        except Exception as e:
+            return {"error": str(e)}
+
+    @mcp.tool()
+    def supervisor_list_addons() -> dict:
+        """List all installed HA add-ons with their state and version."""
+        data = _sup("GET", "/addons")
+        addons = data.get("addons", data) if isinstance(data, dict) else data
+        return {
+            "count": len(addons),
+            "addons": [
+                {
+                    "slug": a.get("slug"),
+                    "name": a.get("name"),
+                    "state": a.get("state"),
+                    "version": a.get("version"),
+                    "update_available": a.get("update_available", False),
+                }
+                for a in (addons if isinstance(addons, list) else [])
+            ],
+        }
+
+    @mcp.tool()
+    def supervisor_addon_info(slug: str) -> dict:
+        """
+        Get detailed info for a specific add-on.
+        
+        Args:
+            slug: Add-on slug (e.g. 'a0d7b954_nodered', 'a0d7b954_influxdb').
+        """
+        return _sup("GET", f"/addons/{slug}/info")
+
+    @mcp.tool()
+    def supervisor_addon_start(slug: str) -> dict:
+        """Start a stopped add-on."""
+        return _sup("POST", f"/addons/{slug}/start")
+
+    @mcp.tool()
+    def supervisor_addon_stop(slug: str) -> dict:
+        """Stop a running add-on."""
+        return _sup("POST", f"/addons/{slug}/stop")
+
+    @mcp.tool()
+    def supervisor_addon_restart(slug: str) -> dict:
+        """Restart an add-on."""
+        return _sup("POST", f"/addons/{slug}/restart")
+
+    @mcp.tool()
+    def supervisor_addon_logs(slug: str) -> dict:
+        """
+        Get the last logs from an add-on.
+        
+        Args:
+            slug: Add-on slug.
+        """
+        try:
+            r = httpx.get(
+                f"{supervisor_url}/addons/{slug}/logs",
+                headers=_headers(),
+                timeout=10,
+            )
+            return {"slug": slug, "logs": r.text[-3000:]}
+        except Exception as e:
+            return {"error": str(e)}
+
+    @mcp.tool()
+    def supervisor_check_config() -> dict:
+        """Check Home Assistant configuration for errors (like 'check configuration' in HA)."""
+        return _sup("POST", "/core/check")
+
+    @mcp.tool()
+    def supervisor_restart_ha(force: bool = False) -> dict:
+        """
+        Restart Home Assistant core.
+        
+        Args:
+            force: If True, force restart even if config check fails. Default False.
+        """
+        return _sup("POST", "/core/restart")
+
+    @mcp.tool()
+    def supervisor_reload_core() -> dict:
+        """Reload HA configuration (templates, automations etc.) without full restart."""
+        return _sup("POST", "/core/reload")
+
+    @mcp.tool()
+    def supervisor_system_info() -> dict:
+        """Get HA system info: version, arch, machine, timezone."""
+        return _sup("GET", "/info")
