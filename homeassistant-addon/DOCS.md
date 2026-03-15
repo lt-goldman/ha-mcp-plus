@@ -10,7 +10,7 @@
 3. Start the addon
 4. Add to Claude.ai as a remote MCP connector:
    ```
-   https://your-ha-url:9583/mcp
+   https://your-ha-url:9584/mcp
    ```
 
 ## How autodiscovery works

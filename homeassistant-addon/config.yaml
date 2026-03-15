@@ -23,10 +23,10 @@ map:
   - config:rw
 
 ports:
-  9583/tcp: 9583
+  9584/tcp: 9584
 
 ports_description:
-  9583/tcp: "MCP Server endpoint (connect from Claude.ai)"
+  9584/tcp: "MCP Server endpoint (connect from Claude.ai)"
 
 # ─────────────────────────────────────────────────────────────
 # Configuration — URLs are auto-discovered from the Supervisor.

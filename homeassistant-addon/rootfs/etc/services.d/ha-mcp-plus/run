@@ -5,7 +5,7 @@ bashio::log.info "Starting ha-mcp-plus..."
 export HA_URL="http://supervisor/core"
 export HA_TOKEN="${SUPERVISOR_TOKEN}"
 export CONFIG_PATH="/config"
-export MCP_PORT="9583"
+export MCP_PORT="9584"
 export MCP_SECRET_PATH="$(bashio::config 'mcp_secret_path')"
 
 # InfluxDB
@@ -19,7 +19,7 @@ export GRAFANA_TOKEN="$(bashio::config 'grafana_token')"
 # Node-RED
 export NODERED_TOKEN="$(bashio::config 'nodered_token')"
 
-bashio::log.info "MCP endpoint: 0.0.0.0:9583${MCP_SECRET_PATH}"
+bashio::log.info "MCP endpoint: 0.0.0.0:9584${MCP_SECRET_PATH}"
 bashio::log.info "Auto-discovering installed addons..."
 
 cd /app

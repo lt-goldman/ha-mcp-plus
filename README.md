@@ -74,11 +74,11 @@ On startup, ha-mcp-plus queries the Supervisor API to find which addons are inst
 
 3. Configure tokens (only for addons that require authentication).
 
-4. Start the add-on — it exposes a MCP server on port 9583.
+4. Start the add-on — it exposes a MCP server on port 9584.
 
 5. Add to Claude.ai as a remote MCP connector:
    ```
-   https://your-ha-url:9583/mcp
+   https://your-ha-url:9584/mcp
    ```
 
 ---

@@ -42,7 +42,7 @@ def load_options() -> dict:
 
 def main():
     options = load_options()
-    port    = int(os.environ.get("MCP_PORT", "9583"))
+    port    = int(os.environ.get("MCP_PORT", "9584"))
     path    = options.get("mcp_secret_path", "/mcp")
 
     log.info("=" * 60)
