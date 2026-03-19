@@ -44,9 +44,19 @@ def get_addon_info(slug: str) -> Optional[dict]:
         )
         if r.status_code == 200:
             return r.json().get("data", {})
+        if r.status_code == 404:
+            log.debug(f"Addon {slug} not installed (404)")
+        else:
+            log.warning(f"Supervisor returned HTTP {r.status_code} for addon {slug}")
+        return None
+    except httpx.ConnectError:
+        log.error(f"Cannot connect to Supervisor API — is this running as a HA addon?")
+        return None
+    except httpx.TimeoutException:
+        log.error(f"Supervisor API timeout while fetching addon info for {slug}")
         return None
     except Exception as e:
-        log.debug(f"Could not fetch addon info for {slug}: {e}")
+        log.error(f"Unexpected error fetching addon info for {slug}: {e}")
         return None
 
 

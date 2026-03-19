@@ -3,8 +3,11 @@ InfluxDB plugin — auto-activated when a0d7b954_influxdb is running.
 """
 
 import httpx
+import logging
 from typing import Optional, List
 from core.plugin_base import BasePlugin, PluginConfig
+
+log = logging.getLogger("ha-mcp-plus.influxdb")
 
 
 class InfluxDBPlugin(BasePlugin):
@@ -31,13 +34,23 @@ class InfluxDBPlugin(BasePlugin):
                     json={"query": flux, "type": "flux", "org": org},
                     timeout=15,
                 )
+                if not r.is_success:
+                    log.error(f"[InfluxDB] Query failed: HTTP {r.status_code} — {r.text[:300]}")
+                    return {"error": f"HTTP {r.status_code}", "detail": r.text[:300]}
                 lines = [l for l in r.text.splitlines() if l and not l.startswith("#")]
                 if not lines:
                     return {"rows": [], "raw": r.text[:300]}
                 headers = lines[0].split(",")
                 rows = [dict(zip(headers, l.split(","))) for l in lines[1:] if l]
                 return {"rows": rows[:200], "total": len(rows)}
+            except httpx.ConnectError:
+                log.error(f"[InfluxDB] Connection refused at {url} — is InfluxDB running?")
+                return {"error": f"Cannot connect to InfluxDB at {url}"}
+            except httpx.TimeoutException:
+                log.error(f"[InfluxDB] Query timeout at {url}")
+                return {"error": f"Timeout connecting to InfluxDB at {url}"}
             except Exception as e:
+                log.error(f"[InfluxDB] Unexpected error during query: {e}")
                 return {"error": str(e)}
 
         @mcp.tool()
@@ -45,9 +58,20 @@ class InfluxDBPlugin(BasePlugin):
             """Check InfluxDB connectivity and version."""
             try:
                 r = httpx.get(f"{url}/health", timeout=5)
+                if not r.is_success:
+                    log.error(f"[InfluxDB] Health check failed: HTTP {r.status_code}")
+                    return {"connected": False, "error": f"HTTP {r.status_code}"}
+                log.debug(f"[InfluxDB] Health check OK at {url}")
                 return r.json()
+            except httpx.ConnectError:
+                log.error(f"[InfluxDB] Connection refused at {url} — is InfluxDB running?")
+                return {"connected": False, "error": f"Cannot connect to InfluxDB at {url}"}
+            except httpx.TimeoutException:
+                log.error(f"[InfluxDB] Health check timeout at {url}")
+                return {"connected": False, "error": f"Timeout at {url}"}
             except Exception as e:
-                return {"error": str(e)}
+                log.error(f"[InfluxDB] Health check error: {e}")
+                return {"connected": False, "error": str(e)}
 
         @mcp.tool()
         def influxdb_list_measurements(bucket_name: Optional[str] = None) -> dict:

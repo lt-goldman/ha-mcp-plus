@@ -27,9 +27,10 @@ OPTIONS_FILE = "/data/options.json"
 
 def load_options() -> dict:
     if os.path.exists(OPTIONS_FILE):
+        log.info(f"Loading options from {OPTIONS_FILE}")
         with open(OPTIONS_FILE) as f:
             return json.load(f)
-    # Fallback to environment variables (for local dev)
+    log.warning(f"Options file not found at {OPTIONS_FILE} — falling back to environment variables (local dev mode)")
     return {
         "influx_token":   os.environ.get("INFLUX_TOKEN", ""),
         "influx_org":     os.environ.get("INFLUX_ORG", "homeassistant"),

@@ -5,12 +5,15 @@ BEFORE execution. Nothing is written unless execute=True is explicitly set.
 """
 
 import os
+import logging
 import shutil
 import yaml
 from datetime import datetime
 from typing import Optional
 from core.plugin_base import BasePlugin, PluginConfig
 from core.safety import plan_append_config_yaml, plan_write_file
+
+log = logging.getLogger("ha-mcp-plus.filesystem")
 
 
 class FilesystemPlugin(BasePlugin):
@@ -34,15 +37,18 @@ class FilesystemPlugin(BasePlugin):
             """
             path = os.path.join(config_path, "configuration.yaml")
             if not os.path.exists(path):
+                log.error(f"[Filesystem] configuration.yaml not found at {path}")
                 return {"error": f"Not found: {path}"}
             with open(path) as f:
                 content = f.read()
+            log.debug(f"[Filesystem] Read configuration.yaml ({len(content.splitlines())} lines)")
             if section is None:
                 return {"content": content, "lines": len(content.splitlines())}
             try:
                 data = yaml.safe_load(content) or {}
                 return {"section": section, "content": data.get(section), "exists": section in data}
             except yaml.YAMLError as e:
+                log.error(f"[Filesystem] YAML parse error in configuration.yaml: {e}")
                 return {"error": str(e)}
 
         @mcp.tool()
@@ -89,11 +95,13 @@ class FilesystemPlugin(BasePlugin):
             try:
                 yaml.safe_load(yaml_block)
             except yaml.YAMLError as e:
+                log.error(f"[Filesystem] Invalid YAML block rejected: {e}")
                 return {"success": False, "error": f"Ongeldige YAML: {e}"}
 
             path = os.path.join(config_path, "configuration.yaml")
             backup = path + ".bak." + datetime.now().strftime("%Y%m%d_%H%M%S")
             shutil.copy2(path, backup)
+            log.info(f"[Filesystem] Backup created: {backup}")
 
             header = f"\n\n# ha-mcp-plus — {datetime.now().isoformat()}"
             if comment:
@@ -102,6 +110,7 @@ class FilesystemPlugin(BasePlugin):
             with open(path, "a") as f:
                 f.write(header + "\n" + yaml_block + "\n")
 
+            log.info(f"[Filesystem] Appended {len(yaml_block.splitlines())} lines to configuration.yaml")
             return {
                 "success": True,
                 "backup": backup,
@@ -158,4 +167,5 @@ class FilesystemPlugin(BasePlugin):
             with open(full_path, "w") as f:
                 f.write(content)
 
+            log.info(f"[Filesystem] Written {len(content)} bytes to {full_path}" + (f" (backup: {backup})" if backup else ""))
             return {"success": True, "path": full_path, "bytes": len(content), "backup": backup}

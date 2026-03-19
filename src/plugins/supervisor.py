@@ -4,9 +4,12 @@ Dangerous operations (restart, stop) go through SafetyGuard.
 """
 
 import httpx
+import logging
 from typing import Optional
 from core.plugin_base import BasePlugin, PluginConfig
 from core.safety import plan_supervisor_restart_ha, plan_addon_stop
+
+log = logging.getLogger("ha-mcp-plus.supervisor")
 
 
 class SupervisorPlugin(BasePlugin):
@@ -24,11 +27,22 @@ class SupervisorPlugin(BasePlugin):
             return {"Authorization": f"Bearer {ha_token}", "Content-Type": "application/json"}
 
         def _sup(method: str, path: str, json: dict = None) -> dict:
+            full_url = f"{supervisor_url}{path}"
             try:
-                r = httpx.request(method, f"{supervisor_url}{path}", headers=_headers(), json=json, timeout=30)
+                r = httpx.request(method, full_url, headers=_headers(), json=json, timeout=30)
+                if not r.is_success:
+                    log.error(f"[Supervisor] HTTP {r.status_code} for {method} {path}: {r.text[:200]}")
+                    return {"error": f"HTTP {r.status_code}", "detail": r.text[:200]}
                 data = r.json()
                 return data.get("data", data)
+            except httpx.ConnectError:
+                log.error(f"[Supervisor] Cannot connect to Supervisor API at {supervisor_url}")
+                return {"error": "Cannot connect to Supervisor API"}
+            except httpx.TimeoutException:
+                log.error(f"[Supervisor] Timeout for {method} {path}")
+                return {"error": f"Timeout for {method} {path}"}
             except Exception as e:
+                log.error(f"[Supervisor] Unexpected error for {method} {path}: {e}")
                 return {"error": str(e)}
 
         # ── SAFE READ TOOLS ───────────────────────────────────────────────
@@ -122,6 +136,7 @@ class SupervisorPlugin(BasePlugin):
                     "next_step": "Roep deze tool opnieuw aan met execute=True als je echt wilt herstarten.",
                 }
 
+            log.warning("[Supervisor] HA Core restart initiated by user request")
             result = _sup("POST", "/core/restart")
             return {
                 "success": True,
@@ -156,6 +171,7 @@ class SupervisorPlugin(BasePlugin):
                     "next_step": "Roep deze tool opnieuw aan met execute=True als je akkoord gaat.",
                 }
 
+            log.warning(f"[Supervisor] Add-on '{name}' ({slug}) stopped by user request")
             result = _sup("POST", f"/addons/{slug}/stop")
             return {
                 "success": True,

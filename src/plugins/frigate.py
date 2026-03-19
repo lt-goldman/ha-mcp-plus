@@ -3,9 +3,12 @@ Frigate plugin — auto-activated when ccab4aaf_frigate-proxy is running.
 """
 
 import httpx
+import logging
 import time
 from typing import Optional
 from core.plugin_base import BasePlugin, PluginConfig
+
+log = logging.getLogger("ha-mcp-plus.frigate")
 
 
 class FrigatePlugin(BasePlugin):
@@ -19,11 +22,21 @@ class FrigatePlugin(BasePlugin):
         url = cfg.url
 
         def _get(path: str, params: dict = None) -> dict:
+            full_url = f"{url}{path}"
             try:
-                r = httpx.get(f"{url}{path}", params=params or {}, timeout=10)
-                r.raise_for_status()
+                r = httpx.get(full_url, params=params or {}, timeout=10)
+                if not r.is_success:
+                    log.error(f"[Frigate] HTTP {r.status_code} for GET {path}: {r.text[:200]}")
+                    return {"error": f"HTTP {r.status_code}"}
                 return r.json()
+            except httpx.ConnectError:
+                log.error(f"[Frigate] Connection refused at {url} — is Frigate running?")
+                return {"error": f"Cannot connect to Frigate at {url}"}
+            except httpx.TimeoutException:
+                log.error(f"[Frigate] Timeout for GET {path}")
+                return {"error": f"Timeout connecting to Frigate at {url}"}
             except Exception as e:
+                log.error(f"[Frigate] Unexpected error for GET {path}: {e}")
                 return {"error": str(e)}
 
         @mcp.tool()
@@ -31,8 +44,19 @@ class FrigatePlugin(BasePlugin):
             """Check Frigate connectivity and version."""
             try:
                 r = httpx.get(f"{url}/api/version", timeout=5)
+                if not r.is_success:
+                    log.error(f"[Frigate] Health check failed: HTTP {r.status_code}")
+                    return {"connected": False, "error": f"HTTP {r.status_code}"}
+                log.debug(f"[Frigate] Health check OK at {url}")
                 return {"connected": True, "version": r.text.strip()}
+            except httpx.ConnectError:
+                log.error(f"[Frigate] Connection refused at {url} — is Frigate running?")
+                return {"connected": False, "error": f"Cannot connect to Frigate at {url}"}
+            except httpx.TimeoutException:
+                log.error(f"[Frigate] Health check timeout at {url}")
+                return {"connected": False, "error": f"Timeout at {url}"}
             except Exception as e:
+                log.error(f"[Frigate] Health check error: {e}")
                 return {"connected": False, "error": str(e)}
 
         @mcp.tool()
