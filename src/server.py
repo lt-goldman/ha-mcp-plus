@@ -61,6 +61,9 @@ def main():
     plugin_list = ", ".join(active_plugins.keys()) or "none"
     mcp = FastMCP(
         "ha-mcp-plus",
+        host="0.0.0.0",
+        port=port,
+        path=path,
         instructions=f"""
 Extended Home Assistant MCP server.
 Active plugins: {plugin_list}
@@ -91,7 +94,7 @@ changes that cannot be undone.
         log.warning(f"Could not load filesystem plugin: {e}")
 
     log.info(f"Starting MCP server — {len(active_plugins)} plugin(s) active")
-    mcp.run(transport="streamable-http", host="0.0.0.0", port=port, path=path)
+    mcp.run(transport="streamable-http")
 
 
 if __name__ == "__main__":
