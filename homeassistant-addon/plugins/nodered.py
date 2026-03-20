@@ -1,5 +1,8 @@
 """
 Node-RED plugin — auto-activated when a0d7b954_nodered is running.
+
+Assumes Node-RED admin auth is disabled (front door open) so the admin API
+is accessible without credentials from within the HA Docker network.
 """
 
 import httpx
@@ -8,7 +11,6 @@ import logging
 import uuid
 from typing import Optional, Dict, Any
 from core.plugin_base import BasePlugin, PluginConfig
-from core.discovery import _supervisor_token
 
 log = logging.getLogger("ha-mcp-plus.nodered")
 
@@ -21,61 +23,20 @@ class NodeRedPlugin(BasePlugin):
     CONFIG_KEY    = "nodered_token"
 
     def register_tools(self, mcp, cfg: PluginConfig) -> None:
-        url            = cfg.url
-        token          = cfg.token
-        username       = cfg.extra.get("nodered_username", "")
-        password       = cfg.extra.get("nodered_password", "")
-        supervisor_tok = _supervisor_token()
-
-        def _nginx_auth_header() -> dict:
-            """Authorization: Bearer <supervisor_token> to pass nginx HA auth."""
-            if supervisor_tok:
-                return {"Authorization": f"Bearer {supervisor_tok}"}
-            return {}
-
-        # If no token but username+password provided, exchange for Bearer token
-        # Use supervisor token as Authorization to pass nginx, credentials in body
-        if not token and username and password:
-            try:
-                r = httpx.post(
-                    f"{url}/auth/token",
-                    headers=_nginx_auth_header(),
-                    data={
-                        "client_id": "node-red-admin",
-                        "grant_type": "password",
-                        "scope": "*",
-                        "username": username,
-                        "password": password,
-                    },
-                    timeout=10,
-                )
-                if r.is_success:
-                    token = r.json().get("access_token", "")
-                    log.info(f"[Node-RED] Successfully authenticated as '{username}'")
-                else:
-                    log.error(f"[Node-RED] Auth failed for '{username}': HTTP {r.status_code} — {r.text[:200]}")
-            except Exception as e:
-                log.error(f"[Node-RED] Auth request failed: {e}")
-
-        def _url(path: str) -> str:
-            """Append Node-RED access_token as query param to avoid Authorization header conflict with nginx."""
-            if token:
-                sep = "&" if "?" in path else "?"
-                return f"{url}{path}{sep}access_token={token}"
-            return f"{url}{path}"
+        url   = cfg.url
+        token = cfg.token
 
         def _headers():
             h = {"Content-Type": "application/json", "Node-RED-API-Version": "v2"}
-            # Use supervisor token for nginx HA auth layer
-            if supervisor_tok:
-                h["Authorization"] = f"Bearer {supervisor_tok}"
+            if token:
+                h["Authorization"] = f"Bearer {token}"
             return h
 
         @mcp.tool()
         def nodered_health() -> dict:
             """Check Node-RED connectivity and version."""
             try:
-                r = httpx.get(_url("/settings"), headers=_headers(), timeout=5)
+                r = httpx.get(f"{url}/settings", headers=_headers(), timeout=5)
                 if not r.is_success:
                     log.error(f"[Node-RED] Health check failed: HTTP {r.status_code}")
                     return {"connected": False, "error": f"HTTP {r.status_code}"}
@@ -96,7 +57,7 @@ class NodeRedPlugin(BasePlugin):
         def nodered_list_flows() -> dict:
             """List all Node-RED flows with their node counts."""
             try:
-                r = httpx.get(_url("/flows"), headers=_headers(), timeout=10)
+                r = httpx.get(f"{url}/flows", headers=_headers(), timeout=10)
                 if not r.is_success:
                     log.error(f"[Node-RED] List flows failed: HTTP {r.status_code}")
                     return {"error": f"HTTP {r.status_code}"}
@@ -126,7 +87,7 @@ class NodeRedPlugin(BasePlugin):
         def nodered_get_flow(flow_id: str) -> dict:
             """Get all nodes for a specific flow tab."""
             try:
-                r = httpx.get(_url(f"/flow/{flow_id}"), headers=_headers(), timeout=10)
+                r = httpx.get(f"{url}/flow/{flow_id}", headers=_headers(), timeout=10)
                 if not r.is_success:
                     log.error(f"[Node-RED] Get flow {flow_id} failed: HTTP {r.status_code}")
                     return {"error": f"HTTP {r.status_code}"}
@@ -148,7 +109,7 @@ class NodeRedPlugin(BasePlugin):
             """
             label = flow_json.get("label", flow_json.get("id", "unknown"))
             try:
-                r = httpx.post(_url("/flow"), headers=_headers(), json=flow_json, timeout=15)
+                r = httpx.post(f"{url}/flow", headers=_headers(), json=flow_json, timeout=15)
                 if r.status_code in (200, 204):
                     log.info(f"[Node-RED] Flow '{label}' deployed successfully")
                 else:
@@ -165,7 +126,7 @@ class NodeRedPlugin(BasePlugin):
         def nodered_delete_flow(flow_id: str) -> dict:
             """Delete a flow tab from Node-RED."""
             try:
-                r = httpx.delete(_url(f"/flow/{flow_id}"), headers=_headers(), timeout=10)
+                r = httpx.delete(f"{url}/flow/{flow_id}", headers=_headers(), timeout=10)
                 if r.status_code == 204:
                     log.info(f"[Node-RED] Flow {flow_id} deleted")
                 else:
@@ -226,22 +187,13 @@ class NodeRedPlugin(BasePlugin):
 # (appended to existing plugin to avoid rewrite)
 def _patch_nodered_safety(mcp, url, token):
     from core.safety import plan_nodered_deploy_flow
-    from core.discovery import _supervisor_token
     import httpx, json, uuid
     from typing import Dict, Any, Optional
 
-    supervisor_tok = _supervisor_token()
-
-    def _url(path: str) -> str:
-        if token:
-            sep = "&" if "?" in path else "?"
-            return f"{url}{path}{sep}access_token={token}"
-        return f"{url}{path}"
-
     def _headers():
         h = {"Content-Type": "application/json", "Node-RED-API-Version": "v2"}
-        if supervisor_tok:
-            h["Authorization"] = f"Bearer {supervisor_tok}"
+        if token:
+            h["Authorization"] = f"Bearer {token}"
         return h
 
     @mcp.tool()
@@ -267,7 +219,7 @@ def _patch_nodered_safety(mcp, url, token):
         # Check if flow already exists
         is_new = True
         try:
-            r = httpx.get(_url(f"/flow/{flow_json.get('id', '')}"), headers=_headers(), timeout=5)
+            r = httpx.get(f"{url}/flow/{flow_json.get('id', '')}", headers=_headers(), timeout=5)
             is_new = r.status_code == 404
         except:
             pass
@@ -284,7 +236,7 @@ def _patch_nodered_safety(mcp, url, token):
             }
 
         try:
-            r = httpx.post(_url("/flow"), headers=_headers(), json=flow_json, timeout=15)
+            r = httpx.post(f"{url}/flow", headers=_headers(), json=flow_json, timeout=15)
             return {
                 "success": r.status_code in (200, 204),
                 "status": r.status_code,
