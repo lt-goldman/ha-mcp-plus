@@ -10,7 +10,10 @@ auto-discovered from the Supervisor API.
 import os
 import json
 import logging
-from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.mcpserver import MCPServer as FastMCP
+except ImportError:
+    from mcp.server.fastmcp import FastMCP
 
 from core.discovery import discover_and_load_plugins
 
@@ -61,9 +64,6 @@ def main():
     plugin_list = ", ".join(active_plugins.keys()) or "none"
     mcp = FastMCP(
         "ha-mcp-plus",
-        host="0.0.0.0",
-        port=port,
-        path=path,
         instructions=f"""
 Extended Home Assistant MCP server.
 Active plugins: {plugin_list}
@@ -94,7 +94,7 @@ changes that cannot be undone.
         log.warning(f"Could not load filesystem plugin: {e}")
 
     log.info(f"Starting MCP server — {len(active_plugins)} plugin(s) active")
-    mcp.run(transport="streamable-http")
+    mcp.run(transport="streamable-http", host="0.0.0.0", port=port, streamable_http_path=path)
 
 
 if __name__ == "__main__":
