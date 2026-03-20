@@ -44,9 +44,19 @@ def get_addon_info(slug: str) -> Optional[dict]:
         )
         if r.status_code == 200:
             return r.json().get("data", {})
+        if r.status_code == 404:
+            log.debug(f"Addon {slug} not installed (404)")
+        else:
+            log.warning(f"Supervisor returned HTTP {r.status_code} for addon {slug}")
+        return None
+    except httpx.ConnectError:
+        log.error(f"Cannot connect to Supervisor API — is this running as a HA addon?")
+        return None
+    except httpx.TimeoutException:
+        log.error(f"Supervisor API timeout while fetching addon info for {slug}")
         return None
     except Exception as e:
-        log.debug(f"Could not fetch addon info for {slug}: {e}")
+        log.error(f"Unexpected error fetching addon info for {slug}: {e}")
         return None
 
 
@@ -109,6 +119,23 @@ def load_all_plugins() -> List[Type[BasePlugin]]:
     return classes
 
 
+def list_all_addons() -> list:
+    """Fetch all installed addons from Supervisor API for diagnostics."""
+    try:
+        r = httpx.get(
+            f"{SUPERVISOR_URL}/addons",
+            headers=_headers(),
+            timeout=10,
+        )
+        if r.status_code == 200:
+            return r.json().get("data", {}).get("addons", [])
+        log.warning(f"Supervisor /addons returned HTTP {r.status_code}")
+        return []
+    except Exception as e:
+        log.error(f"Could not fetch addon list from Supervisor: {e}")
+        return []
+
+
 def discover_and_load_plugins(addon_options: dict) -> Dict[str, tuple]:
     """
     Main entry point: discover all plugin classes, check which addons
@@ -117,6 +144,14 @@ def discover_and_load_plugins(addon_options: dict) -> Dict[str, tuple]:
     Returns:
         Dict[plugin_name → (plugin_instance, PluginConfig)]
     """
+    # Diagnostic: log all installed addon slugs so we can verify slug matching
+    all_addons = list_all_addons()
+    if all_addons:
+        slugs = [a.get("slug") for a in all_addons]
+        log.info(f"Supervisor reports {len(slugs)} installed addon(s): {', '.join(sorted(slugs))}")
+    else:
+        log.warning("Could not retrieve addon list from Supervisor — discovery may fail")
+
     plugin_classes = load_all_plugins()
     active = {}
 

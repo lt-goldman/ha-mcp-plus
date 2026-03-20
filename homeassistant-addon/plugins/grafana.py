@@ -3,8 +3,11 @@ Grafana plugin — auto-activated when a0d7b954_grafana is running.
 """
 
 import httpx
+import logging
 from typing import Optional, List
 from core.plugin_base import BasePlugin, PluginConfig
+
+log = logging.getLogger("ha-mcp-plus.grafana")
 
 
 class GrafanaPlugin(BasePlugin):
@@ -26,17 +29,39 @@ class GrafanaPlugin(BasePlugin):
             return h
 
         def _get(path: str) -> dict:
+            full_url = f"{url}{path}"
             try:
-                r = httpx.get(f"{url}{path}", headers=_headers(), timeout=10)
+                r = httpx.get(full_url, headers=_headers(), timeout=10)
+                if not r.is_success:
+                    log.error(f"[Grafana] HTTP {r.status_code} for GET {path}: {r.text[:200]}")
+                    return {"error": f"HTTP {r.status_code}", "detail": r.text[:200]}
                 return r.json()
+            except httpx.ConnectError:
+                log.error(f"[Grafana] Connection refused at {url} — is Grafana running?")
+                return {"error": f"Cannot connect to Grafana at {url}"}
+            except httpx.TimeoutException:
+                log.error(f"[Grafana] Timeout for GET {path}")
+                return {"error": f"Timeout connecting to Grafana at {url}"}
             except Exception as e:
+                log.error(f"[Grafana] Unexpected error for GET {path}: {e}")
                 return {"error": str(e)}
 
         def _post(path: str, data: dict) -> dict:
+            full_url = f"{url}{path}"
             try:
-                r = httpx.post(f"{url}{path}", headers=_headers(), json=data, timeout=15)
+                r = httpx.post(full_url, headers=_headers(), json=data, timeout=15)
+                if not r.is_success:
+                    log.error(f"[Grafana] HTTP {r.status_code} for POST {path}: {r.text[:200]}")
+                    return {"error": f"HTTP {r.status_code}", "detail": r.text[:200]}
                 return r.json()
+            except httpx.ConnectError:
+                log.error(f"[Grafana] Connection refused at {url} — is Grafana running?")
+                return {"error": f"Cannot connect to Grafana at {url}"}
+            except httpx.TimeoutException:
+                log.error(f"[Grafana] Timeout for POST {path}")
+                return {"error": f"Timeout connecting to Grafana at {url}"}
             except Exception as e:
+                log.error(f"[Grafana] Unexpected error for POST {path}: {e}")
                 return {"error": str(e)}
 
         @mcp.tool()

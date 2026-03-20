@@ -4,9 +4,12 @@ Node-RED plugin — auto-activated when a0d7b954_nodered is running.
 
 import httpx
 import json
+import logging
 import uuid
 from typing import Optional, Dict, Any
 from core.plugin_base import BasePlugin, PluginConfig
+
+log = logging.getLogger("ha-mcp-plus.nodered")
 
 
 class NodeRedPlugin(BasePlugin):
@@ -31,9 +34,20 @@ class NodeRedPlugin(BasePlugin):
             """Check Node-RED connectivity and version."""
             try:
                 r = httpx.get(f"{url}/settings", headers=_headers(), timeout=5)
+                if not r.is_success:
+                    log.error(f"[Node-RED] Health check failed: HTTP {r.status_code}")
+                    return {"connected": False, "error": f"HTTP {r.status_code}"}
+                log.debug(f"[Node-RED] Health check OK at {url}")
                 d = r.json()
                 return {"connected": True, "version": d.get("version")}
+            except httpx.ConnectError:
+                log.error(f"[Node-RED] Connection refused at {url} — is Node-RED running?")
+                return {"connected": False, "error": f"Cannot connect to Node-RED at {url}"}
+            except httpx.TimeoutException:
+                log.error(f"[Node-RED] Health check timeout at {url}")
+                return {"connected": False, "error": f"Timeout at {url}"}
             except Exception as e:
+                log.error(f"[Node-RED] Health check error: {e}")
                 return {"connected": False, "error": str(e)}
 
         @mcp.tool()
@@ -41,6 +55,9 @@ class NodeRedPlugin(BasePlugin):
             """List all Node-RED flows with their node counts."""
             try:
                 r = httpx.get(f"{url}/flows", headers=_headers(), timeout=10)
+                if not r.is_success:
+                    log.error(f"[Node-RED] List flows failed: HTTP {r.status_code}")
+                    return {"error": f"HTTP {r.status_code}"}
                 flows = r.json()
                 tabs = [n for n in flows if n.get("type") == "tab"]
                 nodes_by_tab = {}
@@ -68,8 +85,15 @@ class NodeRedPlugin(BasePlugin):
             """Get all nodes for a specific flow tab."""
             try:
                 r = httpx.get(f"{url}/flow/{flow_id}", headers=_headers(), timeout=10)
+                if not r.is_success:
+                    log.error(f"[Node-RED] Get flow {flow_id} failed: HTTP {r.status_code}")
+                    return {"error": f"HTTP {r.status_code}"}
                 return r.json()
+            except httpx.ConnectError:
+                log.error(f"[Node-RED] Connection refused at {url}")
+                return {"error": f"Cannot connect to Node-RED at {url}"}
             except Exception as e:
+                log.error(f"[Node-RED] Get flow {flow_id} error: {e}")
                 return {"error": str(e)}
 
         @mcp.tool()
@@ -80,10 +104,19 @@ class NodeRedPlugin(BasePlugin):
             Args:
                 flow_json: Flow definition dict with 'id', 'label', and 'nodes' array.
             """
+            label = flow_json.get("label", flow_json.get("id", "unknown"))
             try:
                 r = httpx.post(f"{url}/flow", headers=_headers(), json=flow_json, timeout=15)
+                if r.status_code in (200, 204):
+                    log.info(f"[Node-RED] Flow '{label}' deployed successfully")
+                else:
+                    log.error(f"[Node-RED] Deploy flow '{label}' failed: HTTP {r.status_code} — {r.text[:200]}")
                 return {"success": r.status_code in (200, 204), "status": r.status_code, "flow_id": flow_json.get("id")}
+            except httpx.ConnectError:
+                log.error(f"[Node-RED] Connection refused at {url}")
+                return {"error": f"Cannot connect to Node-RED at {url}"}
             except Exception as e:
+                log.error(f"[Node-RED] Deploy flow '{label}' error: {e}")
                 return {"error": str(e)}
 
         @mcp.tool()
@@ -91,8 +124,16 @@ class NodeRedPlugin(BasePlugin):
             """Delete a flow tab from Node-RED."""
             try:
                 r = httpx.delete(f"{url}/flow/{flow_id}", headers=_headers(), timeout=10)
+                if r.status_code == 204:
+                    log.info(f"[Node-RED] Flow {flow_id} deleted")
+                else:
+                    log.error(f"[Node-RED] Delete flow {flow_id} failed: HTTP {r.status_code}")
                 return {"success": r.status_code == 204, "status": r.status_code}
+            except httpx.ConnectError:
+                log.error(f"[Node-RED] Connection refused at {url}")
+                return {"error": f"Cannot connect to Node-RED at {url}"}
             except Exception as e:
+                log.error(f"[Node-RED] Delete flow {flow_id} error: {e}")
                 return {"error": str(e)}
 
         @mcp.tool()
