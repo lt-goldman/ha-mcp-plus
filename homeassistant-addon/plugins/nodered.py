@@ -8,6 +8,7 @@ import logging
 import uuid
 from typing import Optional, Dict, Any
 from core.plugin_base import BasePlugin, PluginConfig
+from core.discovery import _supervisor_token
 
 log = logging.getLogger("ha-mcp-plus.nodered")
 
@@ -20,16 +21,25 @@ class NodeRedPlugin(BasePlugin):
     CONFIG_KEY    = "nodered_token"
 
     def register_tools(self, mcp, cfg: PluginConfig) -> None:
-        url      = cfg.url
-        token    = cfg.token
-        username = cfg.extra.get("nodered_username", "")
-        password = cfg.extra.get("nodered_password", "")
+        url            = cfg.url
+        token          = cfg.token
+        username       = cfg.extra.get("nodered_username", "")
+        password       = cfg.extra.get("nodered_password", "")
+        supervisor_tok = _supervisor_token()
+
+        def _nginx_headers():
+            """Headers to pass nginx HA auth layer."""
+            h = {}
+            if supervisor_tok:
+                h["X-Hassio-Key"] = supervisor_tok
+            return h
 
         # If no token but username+password provided, exchange for Bearer token
         if not token and username and password:
             try:
                 r = httpx.post(
                     f"{url}/auth/token",
+                    headers=_nginx_headers(),
                     data={
                         "client_id": "node-red-admin",
                         "grant_type": "password",
@@ -49,6 +59,8 @@ class NodeRedPlugin(BasePlugin):
 
         def _headers():
             h = {"Content-Type": "application/json", "Node-RED-API-Version": "v2"}
+            if supervisor_tok:
+                h["X-Hassio-Key"] = supervisor_tok
             if token:
                 h["Authorization"] = f"Bearer {token}"
             return h
@@ -208,11 +220,16 @@ class NodeRedPlugin(BasePlugin):
 # (appended to existing plugin to avoid rewrite)
 def _patch_nodered_safety(mcp, url, token):
     from core.safety import plan_nodered_deploy_flow
+    from core.discovery import _supervisor_token
     import httpx, json, uuid
     from typing import Dict, Any, Optional
 
+    supervisor_tok = _supervisor_token()
+
     def _headers():
         h = {"Content-Type": "application/json", "Node-RED-API-Version": "v2"}
+        if supervisor_tok:
+            h["X-Hassio-Key"] = supervisor_tok
         if token:
             h["Authorization"] = f"Bearer {token}"
         return h
