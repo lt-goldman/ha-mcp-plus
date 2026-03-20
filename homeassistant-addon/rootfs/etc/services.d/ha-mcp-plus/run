@@ -4,6 +4,7 @@ bashio::log.info "Starting ha-mcp-plus..."
 
 export HA_URL="http://supervisor/core"
 export HA_TOKEN="${SUPERVISOR_TOKEN}"
+export SUPERVISOR_TOKEN="${SUPERVISOR_TOKEN}"
 export CONFIG_PATH="/config"
 export MCP_PORT="9584"
 export MCP_SECRET_PATH="$(bashio::config 'mcp_secret_path')"

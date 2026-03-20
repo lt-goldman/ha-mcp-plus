@@ -27,12 +27,16 @@ def _supervisor_token() -> str:
     token = (
         os.environ.get("SUPERVISOR_TOKEN") or
         os.environ.get("HASSIO_TOKEN") or
+        os.environ.get("HA_TOKEN") or
         ""
     )
     if not token:
+        # Dump available env var names to help diagnose
+        auth_vars = [k for k in os.environ if any(x in k.upper() for x in ("TOKEN", "SUPERVISOR", "HASSIO"))]
         log.error(
-            "No Supervisor token found in environment (tried SUPERVISOR_TOKEN, HASSIO_TOKEN). "
-            "Ensure hassio_api: true is set in config.yaml and the addon has hassio_role: manager."
+            f"No Supervisor token found in environment (tried SUPERVISOR_TOKEN, HASSIO_TOKEN, HA_TOKEN). "
+            f"Auth-related env vars present: {auth_vars or 'none'}. "
+            f"Ensure hassio_api: true and hassio_role: manager in config.yaml."
         )
     return token
 
