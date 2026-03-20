@@ -24,12 +24,25 @@ SUPERVISOR_URL = "http://supervisor"
 
 
 def _supervisor_token() -> str:
-    return os.environ.get("SUPERVISOR_TOKEN", "")
+    token = (
+        os.environ.get("SUPERVISOR_TOKEN") or
+        os.environ.get("HASSIO_TOKEN") or
+        ""
+    )
+    if not token:
+        log.error(
+            "No Supervisor token found in environment (tried SUPERVISOR_TOKEN, HASSIO_TOKEN). "
+            "Ensure hassio_api: true is set in config.yaml and the addon has hassio_role: manager."
+        )
+    return token
 
 
 def _headers() -> dict:
+    token = _supervisor_token()
+    if not token:
+        return {"Content-Type": "application/json"}
     return {
-        "Authorization": f"Bearer {_supervisor_token()}",
+        "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
 
@@ -144,7 +157,10 @@ def discover_and_load_plugins(addon_options: dict) -> Dict[str, tuple]:
     Returns:
         Dict[plugin_name → (plugin_instance, PluginConfig)]
     """
-    # Diagnostic: log all installed addon slugs so we can verify slug matching
+    # Diagnostic: verify token and log all installed addon slugs
+    token = _supervisor_token()
+    log.info(f"Supervisor token: {'OK (' + str(len(token)) + ' chars)' if token else 'MISSING — addon discovery will not work'}")
+
     all_addons = list_all_addons()
     if all_addons:
         slugs = [a.get("slug") for a in all_addons]
