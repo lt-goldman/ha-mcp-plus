@@ -102,6 +102,17 @@ changes that cannot be undone.
     except Exception as e:
         log.warning(f"Could not load filesystem plugin: {e}")
 
+    # Register core HA tools (always available — homeassistant_api: true in config.yaml)
+    try:
+        from plugins.homeassistant import HomeAssistantPlugin
+        from core.plugin_base import PluginConfig
+        ha_plugin = HomeAssistantPlugin()
+        ha_cfg = PluginConfig(url="", token="", extra=options)
+        ha_plugin.register_tools(mcp, ha_cfg)
+        log.info("Registering tools: HomeAssistant (always active)")
+    except Exception as e:
+        log.warning(f"Could not load homeassistant plugin: {e}")
+
     log.info(f"Starting MCP server — {len(active_plugins)} plugin(s) active")
     mcp.run(transport="streamable-http")
 
