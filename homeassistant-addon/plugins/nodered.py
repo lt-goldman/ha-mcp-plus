@@ -20,8 +20,32 @@ class NodeRedPlugin(BasePlugin):
     CONFIG_KEY    = "nodered_token"
 
     def register_tools(self, mcp, cfg: PluginConfig) -> None:
-        url   = cfg.url
-        token = cfg.token
+        url      = cfg.url
+        token    = cfg.token
+        username = cfg.extra.get("nodered_username", "")
+        password = cfg.extra.get("nodered_password", "")
+
+        # If no token but username+password provided, exchange for Bearer token
+        if not token and username and password:
+            try:
+                r = httpx.post(
+                    f"{url}/auth/token",
+                    data={
+                        "client_id": "node-red-admin",
+                        "grant_type": "password",
+                        "scope": "*",
+                        "username": username,
+                        "password": password,
+                    },
+                    timeout=10,
+                )
+                if r.is_success:
+                    token = r.json().get("access_token", "")
+                    log.info(f"[Node-RED] Successfully authenticated as '{username}'")
+                else:
+                    log.error(f"[Node-RED] Auth failed for '{username}': HTTP {r.status_code} — {r.text[:200]}")
+            except Exception as e:
+                log.error(f"[Node-RED] Auth request failed: {e}")
 
         def _headers():
             h = {"Content-Type": "application/json", "Node-RED-API-Version": "v2"}
