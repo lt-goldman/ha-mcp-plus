@@ -63,7 +63,6 @@ def main():
         "ha-mcp-plus",
         host="0.0.0.0",
         port=port,
-        path=path,
         instructions=f"""
 Extended Home Assistant MCP server.
 Active plugins: {plugin_list}
@@ -92,6 +91,15 @@ changes that cannot be undone.
         log.info("Registering tools: Filesystem (always active)")
     except Exception as e:
         log.warning(f"Could not load filesystem plugin: {e}")
+
+    # Set the HTTP path (API differs per mcp SDK version)
+    for attr in ("path", "streamable_http_path", "http_path"):
+        if hasattr(mcp, "settings") and hasattr(mcp.settings, attr):
+            setattr(mcp.settings, attr, path)
+            log.info(f"MCP path set to {path} via settings.{attr}")
+            break
+    else:
+        log.warning(f"Could not set MCP path to {path} — using SDK default")
 
     log.info(f"Starting MCP server — {len(active_plugins)} plugin(s) active")
     mcp.run(transport="streamable-http")
