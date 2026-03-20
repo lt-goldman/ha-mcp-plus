@@ -62,14 +62,17 @@ class NodeRedPlugin(BasePlugin):
                     log.error(f"[Node-RED] List flows failed: HTTP {r.status_code}")
                     return {"error": f"HTTP {r.status_code}"}
                 flows = r.json()
-                tabs = [n for n in flows if n.get("type") == "tab"]
+                if not isinstance(flows, list):
+                    return {"error": f"Unexpected response: {type(flows).__name__}"}
+                nodes = [n for n in flows if isinstance(n, dict)]
+                tabs = [n for n in nodes if n.get("type") == "tab"]
                 nodes_by_tab = {}
-                for n in flows:
+                for n in nodes:
                     tid = n.get("z")
                     if tid:
                         nodes_by_tab.setdefault(tid, []).append(n.get("type"))
                 return {
-                    "total_nodes": len(flows),
+                    "total_nodes": len(nodes),
                     "flows": [
                         {
                             "id": t["id"],
