@@ -24,17 +24,51 @@ SUPERVISOR_URL = "http://supervisor"
 
 
 def _supervisor_token() -> str:
+    # 1. Try environment variables
     token = (
         os.environ.get("SUPERVISOR_TOKEN") or
         os.environ.get("HASSIO_TOKEN") or
         os.environ.get("HA_TOKEN") or
         ""
     )
+
+    # 2. Fallback: read from s6 container environment files (s6-overlay v2/v3)
     if not token:
-        # Dump available env var names to help diagnose
+        for path in [
+            "/var/run/s6/container_environment/SUPERVISOR_TOKEN",
+            "/run/s6/container_environment/SUPERVISOR_TOKEN",
+            "/var/run/s6/container_environment/HASSIO_TOKEN",
+            "/run/s6/container_environment/HASSIO_TOKEN",
+        ]:
+            try:
+                with open(path) as f:
+                    token = f.read().strip()
+                if token:
+                    log.info(f"Supervisor token loaded from {path}")
+                    break
+            except FileNotFoundError:
+                pass
+
+    # 3. Last resort: read from PID1 environment (Docker-injected vars)
+    if not token:
+        try:
+            with open("/proc/1/environ", "rb") as f:
+                for item in f.read().split(b"\x00"):
+                    for key in (b"SUPERVISOR_TOKEN=", b"HASSIO_TOKEN="):
+                        if item.startswith(key):
+                            token = item[len(key):].decode().strip()
+                            if token:
+                                log.info(f"Supervisor token loaded from /proc/1/environ ({key.decode().rstrip('=')})")
+                                break
+                    if token:
+                        break
+        except Exception as e:
+            log.debug(f"Could not read /proc/1/environ: {e}")
+
+    if not token:
         auth_vars = [k for k in os.environ if any(x in k.upper() for x in ("TOKEN", "SUPERVISOR", "HASSIO"))]
         log.error(
-            f"No Supervisor token found in environment (tried SUPERVISOR_TOKEN, HASSIO_TOKEN, HA_TOKEN). "
+            f"No Supervisor token found anywhere (env vars, s6 files, /proc/1/environ). "
             f"Auth-related env vars present: {auth_vars or 'none'}. "
             f"Ensure hassio_api: true and hassio_role: manager in config.yaml."
         )
