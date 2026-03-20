@@ -15,6 +15,12 @@ try:
 except ImportError:
     from mcp.server.fastmcp import FastMCP
 
+import importlib.metadata
+try:
+    _mcp_version = importlib.metadata.version("mcp")
+except Exception:
+    _mcp_version = "unknown"
+
 from core.discovery import discover_and_load_plugins
 
 logging.basicConfig(
@@ -51,6 +57,7 @@ def main():
 
     log.info("=" * 60)
     log.info("ha-mcp-plus starting")
+    log.info(f"MCP SDK version: {_mcp_version}")
     log.info(f"Endpoint: 0.0.0.0:{port}{path}")
     log.info("=" * 60)
 
@@ -64,6 +71,8 @@ def main():
     plugin_list = ", ".join(active_plugins.keys()) or "none"
     mcp = FastMCP(
         "ha-mcp-plus",
+        host="0.0.0.0",
+        port=port,
         instructions=f"""
 Extended Home Assistant MCP server.
 Active plugins: {plugin_list}
@@ -94,7 +103,7 @@ changes that cannot be undone.
         log.warning(f"Could not load filesystem plugin: {e}")
 
     log.info(f"Starting MCP server — {len(active_plugins)} plugin(s) active")
-    mcp.run(transport="streamable-http", host="0.0.0.0", port=port, streamable_http_path=path)
+    mcp.run(transport="streamable-http")
 
 
 if __name__ == "__main__":
