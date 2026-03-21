@@ -1,3 +1,6 @@
+## 0.5.8
+- Fix: Node-RED `nodered_list_flows` crashte op Node-RED v2 API response (`{"flows": [...]}` in plaats van een lijst)
+
 ## 0.5.7
 - Addon discovery now uses name pattern matching instead of hardcoded full slugs
 - Plugins match on the name part of the slug (e.g. `influxdb` matches `a0d7b954_influxdb` or any other prefix)

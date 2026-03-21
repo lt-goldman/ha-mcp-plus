@@ -61,7 +61,9 @@ class NodeRedPlugin(BasePlugin):
                 if not r.is_success:
                     log.error(f"[Node-RED] List flows failed: HTTP {r.status_code}")
                     return {"error": f"HTTP {r.status_code}"}
-                flows = r.json()
+                data = r.json()
+                # v2 API returns {"flows": [...]} dict, v1 returns a plain list
+                flows = data.get("flows", data) if isinstance(data, dict) else data
                 if not isinstance(flows, list):
                     return {"error": f"Unexpected response: {type(flows).__name__}"}
                 nodes = [n for n in flows if isinstance(n, dict)]
