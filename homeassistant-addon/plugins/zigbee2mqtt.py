@@ -17,7 +17,7 @@ log = logging.getLogger("ha-mcp-plus.zigbee2mqtt")
 class Zigbee2MQTTPlugin(BasePlugin):
     NAME          = "Zigbee2MQTT"
     DESCRIPTION   = "List and control Zigbee devices and groups via Z2M REST API"
-    ADDON_SLUG    = "a0d7b954_zigbee2mqtt"
+    ADDON_SLUG    = "45df7312_zigbee2mqtt"
     INTERNAL_PORT = 8080
     CONFIG_KEY    = "z2m_token"
 
