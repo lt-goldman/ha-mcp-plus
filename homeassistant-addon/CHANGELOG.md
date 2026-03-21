@@ -1,0 +1,65 @@
+## 0.5.7
+- Addon discovery now uses name pattern matching instead of hardcoded full slugs
+- Plugins match on the name part of the slug (e.g. `influxdb` matches `a0d7b954_influxdb` or any other prefix)
+- Makes discovery resilient to different repository prefixes across installations
+- Falls back to direct slug lookup if the addon list is unavailable
+
+## 0.5.6
+- Fix: Zigbee2MQTT addon slug corrected (`45df7312_zigbee2mqtt` instead of `a0d7b954_zigbee2mqtt`)
+
+## 0.5.5
+- Fix: Supervisor token poisoning introduced in v0.5.3
+- `ha_token` is now injected as `HA_REST_TOKEN` instead of `HA_TOKEN` to prevent interfering with Supervisor token discovery
+- Addon plugin discovery works correctly again
+
+## 0.5.4
+- Fix: Supervisor API returned 403 for all addon discovery calls
+- Changed `hassio_role` from `manager` to `admin` — required for Supervisor `/addons` endpoint access
+
+## 0.5.3
+- New: `ha_token` config option (password field) for use outside HA (local dev, Claude Desktop)
+- All token fields (`ha_token`, `influx_token`, `grafana_token`, `nodered_token`, `z2m_token`) are now masked as password in the HA UI
+- When running as addon, Supervisor token is still used automatically — `ha_token` only activates when no Supervisor token is present
+
+## 0.5.2
+- New plugin: Zigbee2MQTT — list devices/groups, get device info, control devices via Z2M REST API
+- Optional `z2m_token` config for installations with Z2M auth enabled
+
+## 0.5.1
+- New tools: `ha_list_statistic_ids` and `ha_get_statistics` for long-term energy/sensor statistics
+- Added WebSocket helper for HA recorder API access
+
+## 0.5.0
+- HomeAssistant plugin expanded to full REST API coverage
+- New tool categories: entity registry, device registry, area/floor/label registry, zones
+- New tools: calendar, todo lists, scenes, groups, update entities, automation traces
+- New tools: dashboards (Lovelace), helpers, scripts CRUD
+
+## 0.4.0
+- New plugin: HomeAssistant core tools (always active)
+- Tools: entity states, service calls, events, history, logbook, automations, scripts, template rendering, system health
+
+## 0.3.7
+- Fix: Node-RED flow list skips non-dict items in `/flows` response
+
+## 0.3.6
+- Node-RED: removed auth complexity, assumes admin auth is disabled (default)
+- Simplified Node-RED connection — no credentials needed in default setup
+
+## 0.3.0 – 0.3.5
+- Node-RED plugin added: list flows, get flow details, create/deploy flows
+- Multiple fixes to Node-RED authentication and nginx proxy handling
+
+## 0.2.9
+- Robust Supervisor token discovery: checks environment variables, s6 container files, and `/proc/1/environ`
+
+## 0.2.5 – 0.2.8
+- Diagnostic logging improvements
+- Fix: token propagation to Python process
+- Fix: empty SUPERVISOR_TOKEN crash
+
+## 0.2.0
+- Modular plugin system with auto-discovery
+- Plugins: ESPHome, Frigate, Grafana, InfluxDB, Node-RED
+- Safety guard for destructive operations
+- Automatic addon URL discovery via Supervisor API
