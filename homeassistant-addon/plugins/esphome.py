@@ -1,16 +1,9 @@
 """
-ESPHome plugin — auto-activated when 5c53de3b_esphome is running.
-
-This is a good example of how simple it is to add a new plugin:
-1. Subclass BasePlugin
-2. Set ADDON_SLUG, INTERNAL_PORT, NAME
-3. Implement register_tools()
-That's it — discovery and loading is automatic!
+ESPHome plugin — auto-activated when esphome is running.
 """
 
 import httpx
 import logging
-from typing import Optional
 from core.plugin_base import BasePlugin, PluginConfig
 
 log = logging.getLogger("ha-mcp-plus.esphome")
@@ -52,12 +45,13 @@ class ESPHomePlugin(BasePlugin):
             List all ESPHome devices with their online/offline status.
             """
             try:
-                r = httpx.get(f"{url}/devices.json", timeout=10)
+                r = httpx.get(f"{url}/devices", timeout=10, follow_redirects=True)
                 if not r.is_success:
                     log.error(f"[ESPHome] List devices failed: HTTP {r.status_code}")
                     return {"error": f"HTTP {r.status_code}"}
                 data = r.json()
-                devices = data if isinstance(data, list) else data.get("devices", [])
+                # ESPHome /devices returns {"configured": [...], "importable": [...]}
+                devices = data.get("configured", data) if isinstance(data, dict) else data
                 return {
                     "count": len(devices),
                     "devices": [
@@ -86,39 +80,29 @@ class ESPHomePlugin(BasePlugin):
             """
             Get recent logs from an ESPHome device.
 
+            Note: ESPHome log streaming requires a WebSocket connection, which is
+            not yet supported. Use the ESPHome dashboard directly for live logs.
+
             Args:
                 device_name: Device name (as shown in ESPHome dashboard).
             """
-            try:
-                r = httpx.get(f"{url}/{device_name}/logs", timeout=10)
-                if not r.is_success:
-                    log.error(f"[ESPHome] Get logs for '{device_name}' failed: HTTP {r.status_code}")
-                    return {"error": f"HTTP {r.status_code}"}
-                return {"device": device_name, "logs": r.text[-2000:]}
-            except httpx.ConnectError:
-                log.error(f"[ESPHome] Connection refused at {url}")
-                return {"error": f"Cannot connect to ESPHome at {url}"}
-            except Exception as e:
-                log.error(f"[ESPHome] Get logs for '{device_name}' error: {e}")
-                return {"error": str(e)}
+            return {
+                "error": "not_supported",
+                "message": "ESPHome log streaming requires WebSocket — not yet implemented. Use the ESPHome dashboard for live logs.",
+            }
 
         @mcp.tool()
         def esphome_validate_config(device_name: str) -> dict:
             """
             Validate the ESPHome config for a device.
 
+            Note: ESPHome config validation requires a WebSocket connection, which is
+            not yet supported.
+
             Args:
                 device_name: Device name.
             """
-            try:
-                r = httpx.post(f"{url}/{device_name}/validate", timeout=30)
-                if not r.is_success:
-                    log.error(f"[ESPHome] Validate '{device_name}' failed: HTTP {r.status_code}")
-                    return {"error": f"HTTP {r.status_code}"}
-                return r.json()
-            except httpx.ConnectError:
-                log.error(f"[ESPHome] Connection refused at {url}")
-                return {"error": f"Cannot connect to ESPHome at {url}"}
-            except Exception as e:
-                log.error(f"[ESPHome] Validate '{device_name}' error: {e}")
-                return {"error": str(e)}
+            return {
+                "error": "not_supported",
+                "message": "ESPHome config validation requires WebSocket — not yet implemented.",
+            }

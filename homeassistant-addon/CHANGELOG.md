@@ -1,3 +1,7 @@
+## 0.5.12
+- Fix: ESPHome `list_devices` gebruikt nu correct `/devices` endpoint (was `/devices.json`)
+- Fix: `get_device_logs` en `validate_config` geven nu duidelijke foutmelding (vereisen WebSocket, nog niet geïmplementeerd)
+
 ## 0.5.11
 - Fix: ESPHome health check volgt nu redirects (`follow_redirects=True`) — was eerder kapot bij addons die `/` redirecten
 
