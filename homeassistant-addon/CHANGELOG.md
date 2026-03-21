@@ -1,3 +1,6 @@
+## 0.5.10
+- Nieuw tool: `nodered_update_flow` — update een bestaande Node-RED flow tab via PUT zonder de hele tab te verwijderen
+
 ## 0.5.9
 - Nieuw tool: `ha_set_state` — zet de state van een entity direct in de HA state machine (handig voor testen van flows/automaties)
 

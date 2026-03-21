@@ -105,6 +105,31 @@ class NodeRedPlugin(BasePlugin):
                 return {"error": str(e)}
 
         @mcp.tool()
+        def nodered_update_flow(flow_id: str, flow_json: Dict[str, Any]) -> dict:
+            """
+            Update an existing Node-RED flow tab (PUT /flow/{id}).
+            Use this to add, remove or change nodes in an existing tab
+            without deleting the whole tab.
+
+            Args:
+                flow_id: ID of the flow tab to update.
+                flow_json: Complete flow definition (id, label, nodes array).
+            """
+            try:
+                r = httpx.put(f"{url}/flow/{flow_id}", headers=_headers(), json=flow_json, timeout=15)
+                if r.status_code in (200, 204):
+                    log.info(f"[Node-RED] Flow '{flow_id}' updated successfully")
+                else:
+                    log.error(f"[Node-RED] Update flow '{flow_id}' failed: HTTP {r.status_code} — {r.text[:200]}")
+                return {"success": r.status_code in (200, 204), "status": r.status_code, "flow_id": flow_id}
+            except httpx.ConnectError:
+                log.error(f"[Node-RED] Connection refused at {url}")
+                return {"error": f"Cannot connect to Node-RED at {url}"}
+            except Exception as e:
+                log.error(f"[Node-RED] Update flow '{flow_id}' error: {e}")
+                return {"error": str(e)}
+
+        @mcp.tool()
         def nodered_deploy_flow(flow_json: Dict[str, Any]) -> dict:
             """
             Deploy a new flow to Node-RED.
