@@ -1097,4 +1097,89 @@ class HomeAssistantPlugin(BasePlugin):
                 ],
             }
 
+        # ── LONG-TERM STATISTICS (WebSocket) ──────────────────────────────────
+
+        from core.websocket import ha_ws_call
+
+        @mcp.tool()
+        def ha_list_statistic_ids(statistic_type: str = "") -> dict:
+            """
+            List all available long-term statistic IDs (sensors that HA tracks historically).
+
+            Args:
+                statistic_type: Filter by type: 'mean' (sensors with average) or
+                                'sum' (sensors with cumulative total, e.g. energy).
+                                Empty = all.
+            """
+            cmd = {"type": "recorder/list_statistic_ids"}
+            if statistic_type:
+                cmd["statistic_type"] = statistic_type
+            result = ha_ws_call(token, url, cmd)
+            if isinstance(result, dict) and "error" in result:
+                return result
+            if not isinstance(result, list):
+                return {"error": f"Unexpected response: {result}"}
+            return {
+                "count": len(result),
+                "statistic_ids": [
+                    {
+                        "statistic_id": s.get("statistic_id"),
+                        "display_unit_of_measurement": s.get("display_unit_of_measurement"),
+                        "mean": s.get("has_mean", False),
+                        "sum": s.get("has_sum", False),
+                        "name": s.get("name"),
+                        "source": s.get("source"),
+                    }
+                    for s in result
+                ],
+            }
+
+        @mcp.tool()
+        def ha_get_statistics(
+            statistic_ids: list,
+            period: str = "hour",
+            start_time: str = "",
+            end_time: str = "",
+            types: list = None,
+        ) -> dict:
+            """
+            Get long-term statistics for one or more sensors.
+
+            Args:
+                statistic_ids: List of statistic IDs (from ha_list_statistic_ids),
+                               e.g. ['sensor.energy_consumption', 'sensor.gas_usage'].
+                period:        Aggregation period: '5minute', 'hour', 'day', 'week', 'month'.
+                               Default 'hour'.
+                start_time:    Start of range, ISO 8601 (e.g. '2025-01-01T00:00:00+00:00').
+                               Empty = 24 hours ago.
+                end_time:      End of range, ISO 8601. Empty = now.
+                types:         Which values to include: any of 'mean', 'min', 'max', 'sum',
+                               'state', 'change'. Default: all available.
+            """
+            if not start_time:
+                start_time = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+            if not end_time:
+                end_time = datetime.now(timezone.utc).isoformat()
+
+            cmd = {
+                "type": "recorder/statistics_during_period",
+                "statistic_ids": statistic_ids,
+                "period": period,
+                "start_time": start_time,
+                "end_time": end_time,
+                "units": {},
+                "types": types or ["mean", "min", "max", "sum", "state", "change"],
+            }
+            result = ha_ws_call(token, url, cmd)
+            if isinstance(result, dict) and "error" in result:
+                return result
+            # result is {statistic_id: [{start, end, mean, min, max, sum, ...}, ...]}
+            summary = {}
+            for sid, data_points in (result or {}).items():
+                summary[sid] = {
+                    "count": len(data_points),
+                    "data": data_points,
+                }
+            return {"period": period, "statistics": summary}
+
         log.info("[HomeAssistant] Core HA tools registered")
