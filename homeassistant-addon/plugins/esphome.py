@@ -4,6 +4,7 @@ ESPHome plugin — auto-activated when esphome is running.
 
 import httpx
 import logging
+import os
 from core.plugin_base import BasePlugin, PluginConfig
 
 log = logging.getLogger("ha-mcp-plus.esphome")
@@ -19,11 +20,15 @@ class ESPHomePlugin(BasePlugin):
     def register_tools(self, mcp, cfg: PluginConfig) -> None:
         url = cfg.url
 
+        def _headers() -> dict:
+            token = os.environ.get("SUPERVISOR_TOKEN", "")
+            return {"Authorization": f"Bearer {token}"} if token else {}
+
         @mcp.tool()
         def esphome_health() -> dict:
             """Check ESPHome connectivity."""
             try:
-                r = httpx.get(f"{url}/", timeout=5, follow_redirects=True)
+                r = httpx.get(f"{url}/", timeout=5, follow_redirects=True, headers=_headers())
                 if not r.is_success:
                     log.error(f"[ESPHome] Health check failed: HTTP {r.status_code}")
                     return {"connected": False, "error": f"HTTP {r.status_code}"}
@@ -45,7 +50,7 @@ class ESPHomePlugin(BasePlugin):
             List all ESPHome devices with their online/offline status.
             """
             try:
-                r = httpx.get(f"{url}/devices", timeout=10, follow_redirects=True)
+                r = httpx.get(f"{url}/devices", timeout=10, follow_redirects=True, headers=_headers())
                 if not r.is_success:
                     log.error(f"[ESPHome] List devices failed: HTTP {r.status_code}")
                     return {"error": f"HTTP {r.status_code}"}

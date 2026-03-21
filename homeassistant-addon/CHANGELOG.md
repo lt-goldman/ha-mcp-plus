@@ -1,3 +1,6 @@
+## 0.5.13
+- Fix: ESPHome requests sturen nu Supervisor token mee als Bearer auth
+
 ## 0.5.12
 - Fix: ESPHome `list_devices` gebruikt nu correct `/devices` endpoint (was `/devices.json`)
 - Fix: `get_device_logs` en `validate_config` geven nu duidelijke foutmelding (vereisen WebSocket, nog niet geïmplementeerd)
