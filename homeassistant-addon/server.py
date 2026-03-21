@@ -52,12 +52,11 @@ def load_options() -> dict:
 
 
 def _inject_ha_token(options: dict) -> None:
-    """If ha_token is set in options and no Supervisor token is present, inject it as HA_TOKEN."""
-    if os.environ.get("SUPERVISOR_TOKEN") or os.environ.get("HASSIO_TOKEN"):
-        return
+    """If ha_token is set in options, inject it as HA_REST_TOKEN for the HA REST API.
+    Uses a separate env var so it does not interfere with Supervisor token discovery."""
     ha_token = options.get("ha_token", "").strip()
     if ha_token:
-        os.environ["HA_TOKEN"] = ha_token
+        os.environ["HA_REST_TOKEN"] = ha_token
         log.info("Using ha_token from addon options for Home Assistant authentication")
 
 

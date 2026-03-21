@@ -70,7 +70,7 @@ def _supervisor_token() -> str:
         log.error(
             f"No Supervisor token found anywhere (env vars, s6 files, /proc/1/environ). "
             f"Auth-related env vars present: {auth_vars or 'none'}. "
-            f"Ensure hassio_api: true and hassio_role: manager in config.yaml."
+            f"Ensure hassio_api: true and hassio_role: admin in config.yaml."
         )
     return token
 

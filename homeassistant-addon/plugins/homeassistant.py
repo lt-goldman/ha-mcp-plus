@@ -39,7 +39,7 @@ HA_URL = "http://homeassistant:8123"
 
 
 def _ha_token() -> str:
-    for key in ("SUPERVISOR_TOKEN", "HASSIO_TOKEN", "HA_TOKEN", "HOMEASSISTANT_TOKEN"):
+    for key in ("SUPERVISOR_TOKEN", "HASSIO_TOKEN", "HA_REST_TOKEN", "HA_TOKEN", "HOMEASSISTANT_TOKEN"):
         t = os.environ.get(key, "")
         if t:
             return t
