@@ -4,7 +4,7 @@ description: >
   Automatically detects installed addons (InfluxDB, Grafana, Node-RED,
   Frigate, ESPHome) and activates the corresponding tools.
   No URL configuration needed — everything is auto-discovered.
-version: "0.5.13"
+version: "0.5.14"
 slug: "ha_mcp_plus"
 init: false
 arch:
@@ -55,6 +55,9 @@ schema:
   # Zigbee2MQTT — only needed if Z2M auth is enabled (disabled by default)
   z2m_token: password?
 
+  # Music Assistant — long-lived token from MA Settings → Authentication
+  ma_token: password?
+
   log_level: list(trace|debug|info|notice|warning|error|fatal)?
 
 options:
@@ -66,4 +69,5 @@ options:
   grafana_token: ""
   nodered_token: ""
   z2m_token: ""
+  ma_token: ""
   log_level: "info"

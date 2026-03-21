@@ -1,3 +1,7 @@
+## 0.5.14
+- Nieuw: Music Assistant plugin met `ma_health`, `ma_list_players`, `ma_search`, `ma_get_queue`, `ma_player_command`
+- Nieuw veld `ma_token` in addon config voor MA Bearer auth
+
 ## 0.5.13
 - Fix: ESPHome requests sturen nu Supervisor token mee als Bearer auth
 
