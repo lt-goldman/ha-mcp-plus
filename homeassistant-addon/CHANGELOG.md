@@ -1,3 +1,6 @@
+## 0.5.9
+- Nieuw tool: `ha_set_state` — zet de state van een entity direct in de HA state machine (handig voor testen van flows/automaties)
+
 ## 0.5.8
 - Fix: Node-RED `nodered_list_flows` crashte op Node-RED v2 API response (`{"flows": [...]}` in plaats van een lijst)
 

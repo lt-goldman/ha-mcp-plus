@@ -120,6 +120,20 @@ class HomeAssistantPlugin(BasePlugin):
             return _get(f"/states/{entity_id}")
 
         @mcp.tool()
+        def ha_set_state(entity_id: str, state: str, attributes: dict = None) -> dict:
+            """
+            Set the state of an entity directly in the HA state machine.
+            Useful for simulating sensor states (e.g. for testing automations).
+            Does NOT control physical devices — use ha_call_service for that.
+
+            Args:
+                entity_id: Entity to update, e.g. 'binary_sensor.motion_toilet_occupancy'.
+                state: New state value, e.g. 'on', 'off', '21.5'.
+                attributes: Optional dict of attributes to set alongside the state.
+            """
+            return _post(f"/states/{entity_id}", {"state": state, "attributes": attributes or {}})
+
+        @mcp.tool()
         def ha_get_states(domain: str = "") -> dict:
             """
             Get all entity states, optionally filtered by domain.
