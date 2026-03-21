@@ -1,3 +1,6 @@
+## 0.5.11
+- Fix: ESPHome health check volgt nu redirects (`follow_redirects=True`) — was eerder kapot bij addons die `/` redirecten
+
 ## 0.5.10
 - Nieuw tool: `nodered_update_flow` — update een bestaande Node-RED flow tab via PUT zonder de hele tab te verwijderen
 

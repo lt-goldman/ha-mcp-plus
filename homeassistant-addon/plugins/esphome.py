@@ -30,8 +30,8 @@ class ESPHomePlugin(BasePlugin):
         def esphome_health() -> dict:
             """Check ESPHome connectivity."""
             try:
-                r = httpx.get(f"{url}/", timeout=5)
-                if r.status_code != 200:
+                r = httpx.get(f"{url}/", timeout=5, follow_redirects=True)
+                if not r.is_success:
                     log.error(f"[ESPHome] Health check failed: HTTP {r.status_code}")
                     return {"connected": False, "error": f"HTTP {r.status_code}"}
                 log.debug(f"[ESPHome] Health check OK at {url}")
