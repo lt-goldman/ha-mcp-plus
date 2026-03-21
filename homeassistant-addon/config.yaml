@@ -4,7 +4,7 @@ description: >
   Automatically detects installed addons (InfluxDB, Grafana, Node-RED,
   Frigate, ESPHome) and activates the corresponding tools.
   No URL configuration needed — everything is auto-discovered.
-version: "0.5.3"
+version: "0.5.4"
 slug: "ha_mcp_plus"
 init: false
 arch:
@@ -16,7 +16,7 @@ arch:
 
 homeassistant_api: true
 hassio_api: true
-hassio_role: manager
+hassio_role: admin
 auth_api: true
 
 map:
