@@ -18,7 +18,7 @@ log = logging.getLogger("ha-mcp-plus.nodered")
 class NodeRedPlugin(BasePlugin):
     NAME          = "Node-RED"
     DESCRIPTION   = "Read, create and deploy Node-RED flows via the Admin API"
-    ADDON_SLUG    = "a0d7b954_nodered"
+    ADDON_SLUG    = "nodered"
     INTERNAL_PORT = 1880
     CONFIG_KEY    = "nodered_token"
 

@@ -13,7 +13,7 @@ log = logging.getLogger("ha-mcp-plus.influxdb")
 class InfluxDBPlugin(BasePlugin):
     NAME          = "InfluxDB"
     DESCRIPTION   = "Query measurements, find entity data, build Grafana-ready Flux queries"
-    ADDON_SLUG    = "a0d7b954_influxdb"
+    ADDON_SLUG    = "influxdb"
     INTERNAL_PORT = 8086
     CONFIG_KEY    = "influx_token"
 

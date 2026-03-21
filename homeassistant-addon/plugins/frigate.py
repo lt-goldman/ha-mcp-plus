@@ -14,7 +14,7 @@ log = logging.getLogger("ha-mcp-plus.frigate")
 class FrigatePlugin(BasePlugin):
     NAME          = "Frigate"
     DESCRIPTION   = "Access Frigate camera events, recordings, stats and object detection"
-    ADDON_SLUG    = "ccab4aaf_frigate-proxy"
+    ADDON_SLUG    = "frigate"
     INTERNAL_PORT = 5000
     CONFIG_KEY    = ""  # No token needed
 

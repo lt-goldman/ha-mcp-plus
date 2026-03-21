@@ -9,6 +9,7 @@ For each running addon it:
 """
 
 import os
+import re
 import httpx
 import logging
 import importlib
@@ -148,6 +149,25 @@ def discover_addon_url(slug: str, internal_port: int) -> Optional[str]:
     return url
 
 
+def find_addon_slug(name_pattern: str, all_addons: list) -> Optional[str]:
+    """
+    Find the actual installed addon slug by matching name_pattern against
+    the name portion of each slug (everything after the first underscore).
+
+    e.g. pattern "influxdb" matches "a0d7b954_influxdb"
+         pattern "frigate"  matches "ccab4aaf_frigate-proxy"
+
+    Returns the first matching slug whose state is "started", or None.
+    """
+    pattern = re.compile(re.escape(name_pattern), re.IGNORECASE)
+    for addon in all_addons:
+        slug = addon.get("slug", "")
+        name_part = slug.split("_", 1)[-1] if "_" in slug else slug
+        if pattern.search(name_part):
+            return slug
+    return None
+
+
 def load_all_plugins() -> List[Type[BasePlugin]]:
     """
     Auto-discover all plugin classes in the plugins/ directory.
@@ -210,9 +230,19 @@ def discover_and_load_plugins(addon_options: dict) -> Dict[str, tuple]:
     active = {}
 
     for cls in plugin_classes:
-        log.info(f"Checking plugin {cls.NAME} (addon={cls.ADDON_SLUG})...")
+        log.info(f"Checking plugin {cls.NAME} (pattern={cls.ADDON_SLUG})...")
 
-        url = discover_addon_url(cls.ADDON_SLUG, cls.INTERNAL_PORT)
+        # Resolve pattern → actual slug using the addon list, fall back to direct lookup
+        if all_addons:
+            actual_slug = find_addon_slug(cls.ADDON_SLUG, all_addons)
+            if not actual_slug:
+                log.info(f"  → {cls.NAME}: no addon matching '{cls.ADDON_SLUG}' found, skipping")
+                continue
+            log.info(f"  → {cls.NAME}: matched slug '{actual_slug}'")
+        else:
+            actual_slug = cls.ADDON_SLUG  # fallback: use as-is
+
+        url = discover_addon_url(actual_slug, cls.INTERNAL_PORT)
         if not url:
             log.info(f"  → {cls.NAME}: addon not found or not running, skipping")
             continue

@@ -19,7 +19,7 @@ log = logging.getLogger("ha-mcp-plus.esphome")
 class ESPHomePlugin(BasePlugin):
     NAME          = "ESPHome"
     DESCRIPTION   = "Manage ESPHome devices, check logs, trigger OTA updates"
-    ADDON_SLUG    = "5c53de3b_esphome"
+    ADDON_SLUG    = "esphome"
     INTERNAL_PORT = 6052
     CONFIG_KEY    = ""  # ESPHome uses HA auth, no separate token
 

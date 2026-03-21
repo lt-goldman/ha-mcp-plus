@@ -13,7 +13,7 @@ log = logging.getLogger("ha-mcp-plus.grafana")
 class GrafanaPlugin(BasePlugin):
     NAME          = "Grafana"
     DESCRIPTION   = "Create and manage Grafana dashboards and panels via the REST API"
-    ADDON_SLUG    = "a0d7b954_grafana"
+    ADDON_SLUG    = "grafana"
     INTERNAL_PORT = 3000
     CONFIG_KEY    = "grafana_token"
 
