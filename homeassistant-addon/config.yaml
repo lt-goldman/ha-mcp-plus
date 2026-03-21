@@ -4,7 +4,7 @@ description: >
   Automatically detects installed addons (InfluxDB, Grafana, Node-RED,
   Frigate, ESPHome) and activates the corresponding tools.
   No URL configuration needed — everything is auto-discovered.
-version: "0.5.2"
+version: "0.5.3"
 slug: "ha_mcp_plus"
 init: false
 arch:
@@ -36,25 +36,30 @@ ports_description:
 schema:
   mcp_secret_path: str
 
+  # Home Assistant — only needed when running outside HA (e.g. local dev / Claude Desktop)
+  # Leave empty when running as a HA addon; the Supervisor token is used automatically.
+  ha_token: password?
+
   # InfluxDB — only needed if InfluxDB auth is enabled
-  influx_token: str?
+  influx_token: password?
   influx_org: str?
   influx_bucket: str?
 
   # Grafana — only needed if Grafana auth is enabled (not anonymous)
-  grafana_token: str?
+  grafana_token: password?
 
   # Node-RED — no auth needed when admin auth is disabled (front door open)
   # Set nodered_token only if you re-enable Node-RED admin auth
-  nodered_token: str?
+  nodered_token: password?
 
   # Zigbee2MQTT — only needed if Z2M auth is enabled (disabled by default)
-  z2m_token: str?
+  z2m_token: password?
 
   log_level: list(trace|debug|info|notice|warning|error|fatal)?
 
 options:
   mcp_secret_path: "/mcp"
+  ha_token: ""
   influx_token: ""
   influx_org: "homeassistant"
   influx_bucket: "homeassistant"

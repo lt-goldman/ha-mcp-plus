@@ -41,6 +41,7 @@ def load_options() -> dict:
             return json.load(f)
     log.warning(f"Options file not found at {OPTIONS_FILE} — falling back to environment variables (local dev mode)")
     return {
+        "ha_token":       os.environ.get("HA_TOKEN", ""),
         "influx_token":   os.environ.get("INFLUX_TOKEN", ""),
         "influx_org":     os.environ.get("INFLUX_ORG", "homeassistant"),
         "influx_bucket":  os.environ.get("INFLUX_BUCKET", "homeassistant"),
@@ -50,8 +51,19 @@ def load_options() -> dict:
     }
 
 
+def _inject_ha_token(options: dict) -> None:
+    """If ha_token is set in options and no Supervisor token is present, inject it as HA_TOKEN."""
+    if os.environ.get("SUPERVISOR_TOKEN") or os.environ.get("HASSIO_TOKEN"):
+        return
+    ha_token = options.get("ha_token", "").strip()
+    if ha_token:
+        os.environ["HA_TOKEN"] = ha_token
+        log.info("Using ha_token from addon options for Home Assistant authentication")
+
+
 def main():
     options = load_options()
+    _inject_ha_token(options)
     port    = int(os.environ.get("MCP_PORT", "9584"))
     path    = options.get("mcp_secret_path", "/mcp")
 
