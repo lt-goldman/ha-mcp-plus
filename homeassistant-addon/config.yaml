@@ -4,7 +4,7 @@ description: >
   Automatically detects installed addons (InfluxDB, Grafana, Node-RED,
   Frigate, ESPHome) and activates the corresponding tools.
   No URL configuration needed — everything is auto-discovered.
-version: "0.5.1"
+version: "0.5.2"
 slug: "ha_mcp_plus"
 init: false
 arch:
@@ -48,6 +48,9 @@ schema:
   # Set nodered_token only if you re-enable Node-RED admin auth
   nodered_token: str?
 
+  # Zigbee2MQTT — only needed if Z2M auth is enabled (disabled by default)
+  z2m_token: str?
+
   log_level: list(trace|debug|info|notice|warning|error|fatal)?
 
 options:
@@ -57,4 +60,5 @@ options:
   influx_bucket: "homeassistant"
   grafana_token: ""
   nodered_token: ""
+  z2m_token: ""
   log_level: "info"
