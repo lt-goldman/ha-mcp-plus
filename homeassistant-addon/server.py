@@ -198,40 +198,69 @@ def resolve_secret_path(options: dict, port: int) -> str:
 
 # ── Network / IP filtering ────────────────────────────────────
 
-def _local_subnet() -> str:
-    """Best-effort: detect the local machine's /24 subnet."""
+def _auto_detect_networks() -> list[ipaddress.IPv4Network]:
+    """
+    Detect all subnets the addon is connected to:
+    - Loopback (always)
+    - Docker/supervisor bridge network (detected via hostname resolution)
+    - HA host LAN network (detected via outbound route)
+    Returns deduplicated list of /24 networks.
+    """
+    found = set()
+
+    # Loopback — always
+    found.add("127.0.0.0/8")
+
+    # Primary outbound interface (usually the Docker bridge or LAN)
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("10.255.255.255", 1))
         ip = s.getsockname()[0]
         s.close()
-        return str(ipaddress.IPv4Network(f"{ip}/24", strict=False))
+        found.add(str(ipaddress.IPv4Network(f"{ip}/24", strict=False)))
     except Exception:
-        return "192.168.0.0/16"
+        pass
+
+    # All IPs bound to this container (catches Docker bridge + any extra interfaces)
+    try:
+        for addr_info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = addr_info[4][0]
+            addr = ipaddress.ip_address(ip)
+            if not addr.is_loopback:
+                found.add(str(ipaddress.IPv4Network(f"{ip}/24", strict=False)))
+    except Exception:
+        pass
+
+    networks = []
+    for cidr in found:
+        try:
+            networks.append(ipaddress.ip_network(cidr, strict=False))
+        except ValueError:
+            pass
+    return networks
 
 
 def resolve_allowed_networks(options: dict) -> list[ipaddress.IPv4Network]:
     """
-    Parse allowed_networks from config (comma-separated CIDRs).
-    Falls back to auto-detected local /24 subnet + loopback.
+    Always allow: loopback + all auto-detected local subnets (Docker + LAN).
+    Optionally add extra CIDRs from allowed_networks config (additive, never replaces auto).
     """
+    # Base: always auto-detect
+    networks = _auto_detect_networks()
+    log.info(f"[Security] Auto-detected networks: {', '.join(str(n) for n in networks)}")
+
+    # Extra: user-configured (additive)
     raw = options.get("allowed_networks", "").strip()
-    cidrs = [c.strip() for c in raw.split(",") if c.strip()] if raw else []
+    if raw:
+        for cidr in [c.strip() for c in raw.split(",") if c.strip()]:
+            try:
+                net = ipaddress.ip_network(cidr, strict=False)
+                if net not in networks:
+                    networks.append(net)
+                    log.info(f"[Security] Extra network allowed: {net}")
+            except ValueError:
+                log.warning(f"[Security] Invalid CIDR '{cidr}' in allowed_networks — skipping")
 
-    if not cidrs:
-        auto = _local_subnet()
-        cidrs = [auto]
-        log.info(f"[Security] allowed_networks not set — auto-detected subnet: {auto}")
-
-    networks = []
-    for cidr in cidrs:
-        try:
-            networks.append(ipaddress.ip_network(cidr, strict=False))
-        except ValueError:
-            log.warning(f"[Security] Invalid CIDR '{cidr}' in allowed_networks — skipping")
-
-    # Always allow loopback
-    networks.append(ipaddress.ip_network("127.0.0.0/8"))
     return networks
 
 

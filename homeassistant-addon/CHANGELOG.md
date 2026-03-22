@@ -1,3 +1,8 @@
+## 0.5.27
+- Fix: Docker bridge netwerk (172.30.x.x) en HA host LAN worden nu altijd automatisch gedetecteerd en toegestaan
+- `allowed_networks` is nu additief — overschrijft nooit de auto-detectie, alleen extra netwerken erbij
+- Loopback altijd toegestaan
+
 ## 0.5.26
 - Fix: FastMCP import volgorde gewijzigd — importeer nu eerst `fastmcp.FastMCP` (heeft `http_app`), dan pas `mcp.server.fastmcp.FastMCP`, dan `mcp.server.mcpserver.MCPServer`
 - Dit was de oorzaak van de `AttributeError: 'FastMCP' object has no attribute 'http_app'` crash
