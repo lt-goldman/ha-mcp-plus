@@ -4,7 +4,7 @@ description: >
   Automatically detects installed addons (InfluxDB, Grafana, Node-RED,
   Frigate, ESPHome) and activates the corresponding tools.
   No URL configuration needed — everything is auto-discovered.
-version: "0.5.21"
+version: "0.5.22"
 slug: "ha_mcp_plus"
 init: false
 arch:

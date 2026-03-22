@@ -1,3 +1,7 @@
+## 0.5.22
+- Gegenereerd pad wordt nu ook geschreven naar HA Systeem Logboek (Instellingen → Systeem → Logboek)
+- Zichtbaar als waarschuwing van `ha_mcp_plus` — ook als Configuration tab niet ververst
+
 ## 0.5.21
 - Fix: `/mcp` (oude default) wordt nu ook behandeld als leeg — pad wordt automatisch gegenereerd i.p.v. foutmelding
 

@@ -74,12 +74,40 @@ def _inject_ha_token(options: dict) -> None:
 
 # ── Secret path ───────────────────────────────────────────────
 
-def _write_path_to_addon_options(path: str, options: dict) -> bool:
-    """Write the generated path to addon options via Supervisor API.
-    Returns True on success so we know whether to prompt restart."""
+def _notify_system_log(path: str, port: int) -> None:
+    """Write the generated MCP path as a warning to the HA system log.
+    Visible in HA Settings → System → Logboek."""
     token = os.environ.get("SUPERVISOR_TOKEN", "")
     if not token:
-        return False
+        return
+    try:
+        r = httpx.post(
+            "http://supervisor/core/api/services/system_log/write",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={
+                "message": (
+                    f"HA MCP Plus — jouw MCP pad is: {path}  "
+                    f"(poort {port}). "
+                    f"Stel dit in via de Configuration tab van de addon en herstart."
+                ),
+                "level": "warning",
+                "logger": "ha_mcp_plus",
+            },
+            timeout=5,
+        )
+        if r.status_code in (200, 204):
+            log.info("[Security] Path written to HA system log (Instellingen → Systeem → Logboek)")
+        else:
+            log.warning(f"[Security] system_log write returned {r.status_code}: {r.text}")
+    except Exception as e:
+        log.warning(f"Could not write to HA system log: {e}")
+
+
+def _write_path_to_addon_options(path: str, options: dict) -> None:
+    """Attempt to write the generated path to addon options via Supervisor API."""
+    token = os.environ.get("SUPERVISOR_TOKEN", "")
+    if not token:
+        return
     try:
         current = dict(options)
         current["mcp_secret_path"] = path
@@ -90,42 +118,39 @@ def _write_path_to_addon_options(path: str, options: dict) -> bool:
             timeout=5,
         )
         if r.status_code in (200, 204):
-            log.info("[Security] Generated path written to addon Configuration tab")
-            return True
-        log.warning(f"[Security] Supervisor options write returned {r.status_code}: {r.text}")
+            log.info("[Security] Path written to addon Configuration tab")
+        else:
+            log.warning(f"[Security] options write returned {r.status_code}: {r.text}")
     except Exception as e:
         log.warning(f"Could not write path to addon options: {e}")
-    return False
 
 
-def resolve_secret_path(options: dict) -> str:
+def resolve_secret_path(options: dict, port: int) -> str:
     """
     Return the MCP secret path.
     - If configured and not the insecure default '/mcp': use as-is.
-    - If empty: auto-generate a unique path, write it to the Configuration tab
-      via the Supervisor API, then exit cleanly so the user restarts the addon.
+    - If empty or '/mcp': auto-generate, write to HA system log + Configuration tab, exit.
     """
     path = options.get("mcp_secret_path", "").strip()
 
-    if path and path not in ("/mcp", "mcp", ""):
+    if path and path not in ("/mcp", "mcp"):
         return path if path.startswith("/") else f"/{path}"
 
-    # Path is empty or the insecure old default '/mcp' — auto-generate
+    # Path is empty or the insecure old default — auto-generate
     generated = f"/mcp-{uuid.uuid4().hex[:16]}"
+
     log.info("=" * 60)
-    log.info("[Security] mcp_secret_path is leeg of onveilig ('/mcp') — automatisch gegenereerd pad:")
+    log.info("[Security] mcp_secret_path is leeg of onveilig — nieuw pad gegenereerd:")
     log.info(f"[Security]   {generated}")
-
-    written = _write_path_to_addon_options(generated, options)
-
-    log.info("")
-    if written:
-        log.info("[Security] Het pad is opgeslagen in de Configuration tab.")
-        log.info("[Security] >>> START DE ADDON OPNIEUW — dan is het actief. <<<")
-    else:
-        log.info("[Security] Kon het pad niet automatisch opslaan.")
-        log.info(f"[Security] Stel handmatig in: mcp_secret_path: {generated}")
+    log.info("[Security] Dit pad wordt geschreven naar:")
+    log.info("[Security]   1. HA Logboek (Instellingen → Systeem → Logboek)")
+    log.info("[Security]   2. Configuration tab van deze addon")
+    log.info("[Security] Herstart de addon daarna om te activeren.")
     log.info("=" * 60)
+
+    _notify_system_log(generated, port)
+    _write_path_to_addon_options(generated, options)
+
     raise SystemExit(0)
 
 
@@ -192,7 +217,7 @@ def main():
     _inject_ha_token(options)
 
     port    = int(os.environ.get("MCP_PORT", "9584"))
-    path    = resolve_secret_path(options)
+    path    = resolve_secret_path(options, port)
     networks = resolve_allowed_networks(options)
     sandbox_enabled = bool(options.get("sandbox_enabled", False))
 
