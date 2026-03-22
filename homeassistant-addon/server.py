@@ -7,9 +7,18 @@ plugin tools. No manual configuration of URLs needed — everything is
 auto-discovered from the Supervisor API.
 """
 
-import os
+import ipaddress
 import json
 import logging
+import os
+import socket
+import uuid
+
+import uvicorn
+from starlette.middleware import Middleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import PlainTextResponse
+
 try:
     from mcp.server.mcpserver import MCPServer as FastMCP
 except ImportError:
@@ -22,6 +31,7 @@ except Exception:
     _mcp_version = "unknown"
 
 from core.discovery import discover_and_load_plugins
+from core.plugin_base import PluginConfig
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,61 +39,151 @@ logging.basicConfig(
 )
 log = logging.getLogger("ha-mcp-plus")
 
-# --- Read addon options ---
-# When running as a HA addon, options are written to /data/options.json
-OPTIONS_FILE = "/data/options.json"
+OPTIONS_FILE       = "/data/options.json"
+GENERATED_PATH_FILE = "/data/generated_mcp_path.txt"
 
+
+# ── Options ───────────────────────────────────────────────────
 
 def load_options() -> dict:
     if os.path.exists(OPTIONS_FILE):
         log.info(f"Loading options from {OPTIONS_FILE}")
         with open(OPTIONS_FILE) as f:
             return json.load(f)
-    log.warning(f"Options file not found at {OPTIONS_FILE} — falling back to environment variables (local dev mode)")
+    log.warning("Options file not found — falling back to environment variables (local dev mode)")
     return {
-        "ha_token":       os.environ.get("HA_TOKEN", ""),
-        "influx_token":   os.environ.get("INFLUX_TOKEN", ""),
-        "influx_org":     os.environ.get("INFLUX_ORG", "homeassistant"),
-        "influx_bucket":  os.environ.get("INFLUX_BUCKET", "homeassistant"),
-        "grafana_token":  os.environ.get("GRAFANA_TOKEN", ""),
-        "nodered_token":  os.environ.get("NODERED_TOKEN", ""),
-        "mcp_secret_path": os.environ.get("MCP_SECRET_PATH", "/mcp"),
+        "ha_token":         os.environ.get("HA_TOKEN", ""),
+        "influx_token":     os.environ.get("INFLUX_TOKEN", ""),
+        "influx_org":       os.environ.get("INFLUX_ORG", "homeassistant"),
+        "influx_bucket":    os.environ.get("INFLUX_BUCKET", "homeassistant"),
+        "grafana_token":    os.environ.get("GRAFANA_TOKEN", ""),
+        "nodered_token":    os.environ.get("NODERED_TOKEN", ""),
+        "mcp_secret_path":  os.environ.get("MCP_SECRET_PATH", ""),
+        "allowed_networks": os.environ.get("ALLOWED_NETWORKS", ""),
+        "sandbox_enabled":  os.environ.get("SANDBOX_ENABLED", "false").lower() == "true",
     }
 
 
 def _inject_ha_token(options: dict) -> None:
-    """If ha_token is set in options, inject it as HA_REST_TOKEN for the HA REST API.
-    Uses a separate env var so it does not interfere with Supervisor token discovery."""
     ha_token = options.get("ha_token", "").strip()
     if ha_token:
         os.environ["HA_REST_TOKEN"] = ha_token
         log.info("Using ha_token from addon options for Home Assistant authentication")
 
 
+# ── Secret path ───────────────────────────────────────────────
+
+def resolve_secret_path(options: dict) -> str:
+    """
+    Return the MCP secret path.
+    - If configured and not the old default '/mcp': use as-is.
+    - Otherwise: generate a UUID-based path once and persist it.
+    """
+    configured = options.get("mcp_secret_path", "").strip()
+    if configured and configured != "/mcp":
+        return configured if configured.startswith("/") else f"/{configured}"
+
+    # Use or generate a persistent random path
+    if os.path.exists(GENERATED_PATH_FILE):
+        with open(GENERATED_PATH_FILE) as f:
+            path = f.read().strip()
+        if path:
+            return path
+
+    path = f"/mcp-{uuid.uuid4().hex[:16]}"
+    try:
+        with open(GENERATED_PATH_FILE, "w") as f:
+            f.write(path)
+    except Exception as e:
+        log.warning(f"Could not persist generated path: {e}")
+    return path
+
+
+# ── Network / IP filtering ────────────────────────────────────
+
+def _local_subnet() -> str:
+    """Best-effort: detect the local machine's /24 subnet."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))
+        ip = s.getsockname()[0]
+        s.close()
+        return str(ipaddress.IPv4Network(f"{ip}/24", strict=False))
+    except Exception:
+        return "192.168.0.0/16"
+
+
+def resolve_allowed_networks(options: dict) -> list[ipaddress.IPv4Network]:
+    """
+    Parse allowed_networks from config (comma-separated CIDRs).
+    Falls back to auto-detected local /24 subnet + loopback.
+    """
+    raw = options.get("allowed_networks", "").strip()
+    cidrs = [c.strip() for c in raw.split(",") if c.strip()] if raw else []
+
+    if not cidrs:
+        auto = _local_subnet()
+        cidrs = [auto]
+        log.info(f"[Security] allowed_networks not set — auto-detected subnet: {auto}")
+
+    networks = []
+    for cidr in cidrs:
+        try:
+            networks.append(ipaddress.ip_network(cidr, strict=False))
+        except ValueError:
+            log.warning(f"[Security] Invalid CIDR '{cidr}' in allowed_networks — skipping")
+
+    # Always allow loopback
+    networks.append(ipaddress.ip_network("127.0.0.0/8"))
+    return networks
+
+
+class IPFilterMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, allowed_networks: list):
+        super().__init__(app)
+        self.allowed = allowed_networks
+
+    async def dispatch(self, request, call_next):
+        client_ip = request.client.host if request.client else "unknown"
+        try:
+            addr = ipaddress.ip_address(client_ip)
+            if any(addr in net for net in self.allowed):
+                return await call_next(request)
+        except ValueError:
+            pass
+        log.warning(f"[Security] Blocked connection from {client_ip}")
+        return PlainTextResponse("403 Forbidden", status_code=403)
+
+
+# ── Main ──────────────────────────────────────────────────────
+
 def main():
     options = load_options()
     _inject_ha_token(options)
+
     port    = int(os.environ.get("MCP_PORT", "9584"))
-    path    = options.get("mcp_secret_path", "/mcp")
+    path    = resolve_secret_path(options)
+    networks = resolve_allowed_networks(options)
+    sandbox_enabled = bool(options.get("sandbox_enabled", False))
 
     log.info("=" * 60)
     log.info("ha-mcp-plus starting")
     log.info(f"MCP SDK version: {_mcp_version}")
-    log.info(f"Endpoint: 0.0.0.0:{port}{path}")
+    log.info(f"Endpoint:        0.0.0.0:{port}{path}")
+    log.info(f"Sandbox:         {'ENABLED' if sandbox_enabled else 'disabled'}")
+    log.info(f"Allowed networks: {', '.join(str(n) for n in networks)}")
+    log.info("=" * 60)
+    log.info(f"  *** MCP path: {path} ***")
     log.info("=" * 60)
 
     # Discover which addons are running and activate plugins
     active_plugins = discover_and_load_plugins(options)
-
     if not active_plugins:
         log.warning("No active plugins found. Is any supported addon running?")
 
-    # Build MCP server
     plugin_list = ", ".join(active_plugins.keys()) or "none"
     mcp = FastMCP(
         "ha-mcp-plus",
-        host="0.0.0.0",
-        port=port,
         instructions=f"""
 Extended Home Assistant MCP server.
 Active plugins: {plugin_list}
@@ -101,22 +201,19 @@ changes that cannot be undone.
         log.info(f"Registering tools: {name}")
         instance.register_tools(mcp, cfg)
 
-    # Also register filesystem tools (always available — needs /config mount)
+    # Filesystem tools (always active)
     try:
         from plugins.filesystem import FilesystemPlugin
         fs_plugin = FilesystemPlugin()
-        fs_cfg_extra = {"config_path": "/config"}
-        from core.plugin_base import PluginConfig
-        fs_cfg = PluginConfig(url="", token="", extra=fs_cfg_extra)
+        fs_cfg = PluginConfig(url="", token="", extra={"config_path": "/config"})
         fs_plugin.register_tools(mcp, fs_cfg)
         log.info("Registering tools: Filesystem (always active)")
     except Exception as e:
         log.warning(f"Could not load filesystem plugin: {e}")
 
-    # Register core HA tools (always available — homeassistant_api: true in config.yaml)
+    # Core HA tools (always active)
     try:
         from plugins.homeassistant import HomeAssistantPlugin
-        from core.plugin_base import PluginConfig
         ha_plugin = HomeAssistantPlugin()
         ha_cfg = PluginConfig(url="", token="", extra=options)
         ha_plugin.register_tools(mcp, ha_cfg)
@@ -124,23 +221,34 @@ changes that cannot be undone.
     except Exception as e:
         log.warning(f"Could not load homeassistant plugin: {e}")
 
-    # Register Python sandbox (always active)
+    # Python sandbox (only when explicitly enabled)
+    if sandbox_enabled:
+        try:
+            from plugins.sandbox import SandboxPlugin
+            sandbox_plugin = SandboxPlugin()
+            influx_url = ""
+            if "InfluxDB" in active_plugins:
+                _, influx_cfg = active_plugins["InfluxDB"]
+                influx_url = influx_cfg.url
+            sandbox_cfg = PluginConfig(url="", token="", extra={**options, "_influx_url": influx_url})
+            sandbox_plugin.register_tools(mcp, sandbox_cfg)
+            log.info("Registering tools: Sandbox (enabled)")
+        except Exception as e:
+            log.warning(f"Could not load sandbox plugin: {e}")
+    else:
+        log.info("Sandbox disabled (set sandbox_enabled: true to enable)")
+
+    # Build ASGI app with IP filter middleware and run via uvicorn
+    middleware = [Middleware(IPFilterMiddleware, allowed_networks=networks)]
     try:
-        from plugins.sandbox import SandboxPlugin
-        from core.plugin_base import PluginConfig
-        sandbox_plugin = SandboxPlugin()
-        influx_url = ""
-        if "InfluxDB" in active_plugins:
-            _, influx_cfg = active_plugins["InfluxDB"]
-            influx_url = influx_cfg.url
-        sandbox_cfg = PluginConfig(url="", token="", extra={**options, "_influx_url": influx_url})
-        sandbox_plugin.register_tools(mcp, sandbox_cfg)
-        log.info("Registering tools: Sandbox (always active)")
-    except Exception as e:
-        log.warning(f"Could not load sandbox plugin: {e}")
+        app = mcp.http_app(path=path, middleware=middleware)
+    except TypeError:
+        # Older FastMCP without middleware param — add it after
+        app = mcp.http_app(path=path)
+        app.add_middleware(IPFilterMiddleware, allowed_networks=networks)
 
     log.info(f"Starting MCP server — {len(active_plugins)} plugin(s) active")
-    mcp.run(transport="streamable-http")
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
 
 
 if __name__ == "__main__":

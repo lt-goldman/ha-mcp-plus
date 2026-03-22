@@ -4,7 +4,7 @@ description: >
   Automatically detects installed addons (InfluxDB, Grafana, Node-RED,
   Frigate, ESPHome) and activates the corresponding tools.
   No URL configuration needed — everything is auto-discovered.
-version: "0.5.16"
+version: "0.5.17"
 slug: "ha_mcp_plus"
 init: false
 arch:
@@ -58,10 +58,23 @@ schema:
   # Music Assistant — long-lived token from MA Settings → Authentication
   ma_token: password?
 
+  # ── Security ──────────────────────────────────────────────────
+  # Leave mcp_secret_path empty to auto-generate a random path on first start.
+  # The active path is always shown in the addon log on startup.
+  mcp_secret_path: str?
+
+  # Comma-separated list of allowed CIDRs (e.g. "192.168.1.0/24,10.0.0.0/8").
+  # Leave empty to auto-detect the local subnet. Loopback is always allowed.
+  allowed_networks: str?
+
+  # Enable the Python sandbox tool (code execution). Disabled by default.
+  # Only enable when actively using analysis features — disable when not needed.
+  sandbox_enabled: bool?
+
   log_level: list(trace|debug|info|notice|warning|error|fatal)?
 
 options:
-  mcp_secret_path: "/mcp"
+  mcp_secret_path: ""
   ha_token: ""
   influx_token: ""
   influx_org: "homeassistant"
@@ -70,4 +83,6 @@ options:
   nodered_token: ""
   z2m_token: ""
   ma_token: ""
+  allowed_networks: ""
+  sandbox_enabled: false
   log_level: "info"

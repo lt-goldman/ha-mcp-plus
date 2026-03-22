@@ -1,3 +1,9 @@
+## 0.5.17
+- Security: IP filtering middleware — alleen verbindingen vanuit toegestane subnets worden geaccepteerd (auto-detect lokaal subnet, uitbreidbaar via `allowed_networks`)
+- Security: `sandbox_enabled` config optie — sandbox staat standaard UIT, expliciet aan te zetten
+- Security: `mcp_secret_path` leeg laten genereert automatisch een random UUID-pad bij eerste start (persistent in /data)
+- Dependency: uvicorn toegevoegd voor directe ASGI app controle
+
 ## 0.5.16
 - Nieuw: Python Sandbox tool (`python_sandbox`) — altijd actief, voert willekeurige Python code uit server-side
 - Pre-geconfigureerd met InfluxDB, numpy, pandas, requests en HA Supervisor toegang
