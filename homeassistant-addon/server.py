@@ -198,13 +198,30 @@ def resolve_secret_path(options: dict, port: int) -> str:
 
 # ── Network / IP filtering ────────────────────────────────────
 
+_DOCKER_RANGE = ipaddress.ip_network("172.16.0.0/12")
+
+
+def _ip_to_subnet(ip_str: str) -> str:
+    """
+    Return appropriate subnet for an IP:
+    - 172.16.0.0/12 (Docker/HA Supervisor range) → /16 to cover host gateway and
+      addon containers that may be on adjacent /24 blocks (e.g. 172.30.32.1 vs 172.30.33.x)
+    - All other private ranges → /24
+    """
+    try:
+        if ipaddress.ip_address(ip_str) in _DOCKER_RANGE:
+            return str(ipaddress.IPv4Network(f"{ip_str}/16", strict=False))
+    except ValueError:
+        pass
+    return str(ipaddress.IPv4Network(f"{ip_str}/24", strict=False))
+
+
 def _auto_detect_networks() -> list[ipaddress.IPv4Network]:
     """
     Detect all subnets the addon is connected to:
     - Loopback (always)
-    - Docker/supervisor bridge network (detected via hostname resolution)
-    - HA host LAN network (detected via outbound route)
-    Returns deduplicated list of /24 networks.
+    - Docker/supervisor bridge network (detected via hostname resolution) — uses /16
+    - HA host LAN network (detected via outbound route) — uses /24
     """
     found = set()
 
@@ -217,7 +234,7 @@ def _auto_detect_networks() -> list[ipaddress.IPv4Network]:
         s.connect(("10.255.255.255", 1))
         ip = s.getsockname()[0]
         s.close()
-        found.add(str(ipaddress.IPv4Network(f"{ip}/24", strict=False)))
+        found.add(_ip_to_subnet(ip))
     except Exception:
         pass
 
@@ -227,7 +244,7 @@ def _auto_detect_networks() -> list[ipaddress.IPv4Network]:
             ip = addr_info[4][0]
             addr = ipaddress.ip_address(ip)
             if not addr.is_loopback:
-                found.add(str(ipaddress.IPv4Network(f"{ip}/24", strict=False)))
+                found.add(_ip_to_subnet(ip))
     except Exception:
         pass
 
