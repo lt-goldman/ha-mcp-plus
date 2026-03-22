@@ -107,20 +107,13 @@ def resolve_secret_path(options: dict) -> str:
     """
     path = options.get("mcp_secret_path", "").strip()
 
-    if path and path not in ("/mcp", "mcp"):
+    if path and path not in ("/mcp", "mcp", ""):
         return path if path.startswith("/") else f"/{path}"
 
-    if path in ("/mcp", "mcp"):
-        log.error("=" * 60)
-        log.error("CONFIGURATIEFOUT: '/mcp' is niet toegestaan als pad (te makkelijk te raden).")
-        log.error("Verander mcp_secret_path naar een uniek pad in de Configuration tab.")
-        log.error("=" * 60)
-        raise SystemExit(1)
-
-    # Path is empty — auto-generate, write to Configuration tab, then exit
+    # Path is empty or the insecure old default '/mcp' — auto-generate
     generated = f"/mcp-{uuid.uuid4().hex[:16]}"
     log.info("=" * 60)
-    log.info("[Security] mcp_secret_path is leeg — automatisch gegenereerd pad:")
+    log.info("[Security] mcp_secret_path is leeg of onveilig ('/mcp') — automatisch gegenereerd pad:")
     log.info(f"[Security]   {generated}")
 
     written = _write_path_to_addon_options(generated, options)

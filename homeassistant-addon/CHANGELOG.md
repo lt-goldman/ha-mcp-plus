@@ -1,3 +1,6 @@
+## 0.5.21
+- Fix: `/mcp` (oude default) wordt nu ook behandeld als leeg — pad wordt automatisch gegenereerd i.p.v. foutmelding
+
 ## 0.5.20
 - Security: `mcp_secret_path` leeg laten genereert automatisch een uniek pad bij eerste start
 - Na generatie wordt het pad opgeslagen in de Configuration tab via Supervisor API, daarna stopt de addon — herstart vereist
