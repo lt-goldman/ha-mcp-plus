@@ -1,3 +1,8 @@
+## 0.5.29
+- Verwijderd: IP filter middleware — Docker NAT maakt het onmogelijk om het echte client-IP te zien; alle verbindingen kwamen binnen als 172.30.32.1
+- Beveiliging rust nu volledig op het geheime pad (`mcp_secret_path`)
+- Verwijderd: `allowed_networks` config optie
+
 ## 0.5.28
 - Fix: Docker bridge host gateway (172.30.32.1) werd geblokkeerd — HA Supervisor gebruikt 172.30.32.0/23, addon zit op 172.30.33.x waardoor de gateway buiten het /24 viel
 - IP-detectie gebruikt nu /16 voor 172.16.0.0/12 (Docker-range) in plaats van /24 — dekt zowel addon-containers als host gateway

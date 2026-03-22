@@ -7,17 +7,12 @@ plugin tools. No manual configuration of URLs needed — everything is
 auto-discovered from the Supervisor API.
 """
 
-import ipaddress
 import json
 import logging
 import os
-import socket
 import uuid
 
 import uvicorn
-from starlette.middleware import Middleware
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import PlainTextResponse
 
 try:
     from fastmcp import FastMCP
@@ -56,15 +51,14 @@ def load_options() -> dict:
             return json.load(f)
     log.warning("Options file not found — falling back to environment variables (local dev mode)")
     return {
-        "ha_token":         os.environ.get("HA_TOKEN", ""),
-        "influx_token":     os.environ.get("INFLUX_TOKEN", ""),
-        "influx_org":       os.environ.get("INFLUX_ORG", "homeassistant"),
-        "influx_bucket":    os.environ.get("INFLUX_BUCKET", "homeassistant"),
-        "grafana_token":    os.environ.get("GRAFANA_TOKEN", ""),
-        "nodered_token":    os.environ.get("NODERED_TOKEN", ""),
-        "mcp_secret_path":  os.environ.get("MCP_SECRET_PATH", ""),
-        "allowed_networks": os.environ.get("ALLOWED_NETWORKS", ""),
-        "sandbox_enabled":  os.environ.get("SANDBOX_ENABLED", "false").lower() == "true",
+        "ha_token":        os.environ.get("HA_TOKEN", ""),
+        "influx_token":    os.environ.get("INFLUX_TOKEN", ""),
+        "influx_org":      os.environ.get("INFLUX_ORG", "homeassistant"),
+        "influx_bucket":   os.environ.get("INFLUX_BUCKET", "homeassistant"),
+        "grafana_token":   os.environ.get("GRAFANA_TOKEN", ""),
+        "nodered_token":   os.environ.get("NODERED_TOKEN", ""),
+        "mcp_secret_path": os.environ.get("MCP_SECRET_PATH", ""),
+        "sandbox_enabled": os.environ.get("SANDBOX_ENABLED", "false").lower() == "true",
     }
 
 
@@ -196,117 +190,14 @@ def resolve_secret_path(options: dict, port: int) -> str:
     raise SystemExit(0)
 
 
-# ── Network / IP filtering ────────────────────────────────────
-
-_DOCKER_RANGE = ipaddress.ip_network("172.16.0.0/12")
-
-
-def _ip_to_subnet(ip_str: str) -> str:
-    """
-    Return appropriate subnet for an IP:
-    - 172.16.0.0/12 (Docker/HA Supervisor range) → /16 to cover host gateway and
-      addon containers that may be on adjacent /24 blocks (e.g. 172.30.32.1 vs 172.30.33.x)
-    - All other private ranges → /24
-    """
-    try:
-        if ipaddress.ip_address(ip_str) in _DOCKER_RANGE:
-            return str(ipaddress.IPv4Network(f"{ip_str}/16", strict=False))
-    except ValueError:
-        pass
-    return str(ipaddress.IPv4Network(f"{ip_str}/24", strict=False))
-
-
-def _auto_detect_networks() -> list[ipaddress.IPv4Network]:
-    """
-    Detect all subnets the addon is connected to:
-    - Loopback (always)
-    - Docker/supervisor bridge network (detected via hostname resolution) — uses /16
-    - HA host LAN network (detected via outbound route) — uses /24
-    """
-    found = set()
-
-    # Loopback — always
-    found.add("127.0.0.0/8")
-
-    # Primary outbound interface (usually the Docker bridge or LAN)
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("10.255.255.255", 1))
-        ip = s.getsockname()[0]
-        s.close()
-        found.add(_ip_to_subnet(ip))
-    except Exception:
-        pass
-
-    # All IPs bound to this container (catches Docker bridge + any extra interfaces)
-    try:
-        for addr_info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            ip = addr_info[4][0]
-            addr = ipaddress.ip_address(ip)
-            if not addr.is_loopback:
-                found.add(_ip_to_subnet(ip))
-    except Exception:
-        pass
-
-    networks = []
-    for cidr in found:
-        try:
-            networks.append(ipaddress.ip_network(cidr, strict=False))
-        except ValueError:
-            pass
-    return networks
-
-
-def resolve_allowed_networks(options: dict) -> list[ipaddress.IPv4Network]:
-    """
-    Always allow: loopback + all auto-detected local subnets (Docker + LAN).
-    Optionally add extra CIDRs from allowed_networks config (additive, never replaces auto).
-    """
-    # Base: always auto-detect
-    networks = _auto_detect_networks()
-    log.info(f"[Security] Auto-detected networks: {', '.join(str(n) for n in networks)}")
-
-    # Extra: user-configured (additive)
-    raw = options.get("allowed_networks", "").strip()
-    if raw:
-        for cidr in [c.strip() for c in raw.split(",") if c.strip()]:
-            try:
-                net = ipaddress.ip_network(cidr, strict=False)
-                if net not in networks:
-                    networks.append(net)
-                    log.info(f"[Security] Extra network allowed: {net}")
-            except ValueError:
-                log.warning(f"[Security] Invalid CIDR '{cidr}' in allowed_networks — skipping")
-
-    return networks
-
-
-class IPFilterMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, allowed_networks: list):
-        super().__init__(app)
-        self.allowed = allowed_networks
-
-    async def dispatch(self, request, call_next):
-        client_ip = request.client.host if request.client else "unknown"
-        try:
-            addr = ipaddress.ip_address(client_ip)
-            if any(addr in net for net in self.allowed):
-                return await call_next(request)
-        except ValueError:
-            pass
-        log.warning(f"[Security] Blocked connection from {client_ip}")
-        return PlainTextResponse("403 Forbidden", status_code=403)
-
-
 # ── Main ──────────────────────────────────────────────────────
 
 def main():
     options = load_options()
     _inject_ha_token(options)
 
-    port    = int(os.environ.get("MCP_PORT", "9584"))
-    path    = resolve_secret_path(options, port)
-    networks = resolve_allowed_networks(options)
+    port = int(os.environ.get("MCP_PORT", "9584"))
+    path = resolve_secret_path(options, port)
     sandbox_enabled = bool(options.get("sandbox_enabled", False))
 
     log.info("=" * 60)
@@ -314,7 +205,6 @@ def main():
     log.info(f"MCP SDK version: {_mcp_version}")
     log.info(f"Endpoint:        0.0.0.0:{port}{path}")
     log.info(f"Sandbox:         {'ENABLED' if sandbox_enabled else 'disabled'}")
-    log.info(f"Allowed networks: {', '.join(str(n) for n in networks)}")
     log.info("=" * 60)
 
     # Discover which addons are running and activate plugins
@@ -379,14 +269,7 @@ changes that cannot be undone.
     else:
         log.info("Sandbox disabled (set sandbox_enabled: true to enable)")
 
-    # Build ASGI app with IP filter middleware and run via uvicorn
-    middleware = [Middleware(IPFilterMiddleware, allowed_networks=networks)]
-    try:
-        app = mcp.http_app(path=path, middleware=middleware)
-    except TypeError:
-        # Older FastMCP without middleware param — add it after
-        app = mcp.http_app(path=path)
-        app.add_middleware(IPFilterMiddleware, allowed_networks=networks)
+    app = mcp.http_app(path=path)
 
     log.info(f"Starting MCP server — {len(active_plugins)} plugin(s) active")
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
