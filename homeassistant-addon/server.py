@@ -86,7 +86,7 @@ def _publish_path_to_ha(path: str, port: int) -> None:
 
     # 1. Set a HA sensor state — always visible in Developer Tools → States
     try:
-        r = httpx.put(
+        r = httpx.post(
             "http://supervisor/core/api/states/sensor.ha_mcp_plus_endpoint",
             headers=headers,
             json={

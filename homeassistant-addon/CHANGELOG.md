@@ -1,3 +1,6 @@
+## 0.5.24
+- Fix: sensor state schrijven gebruikte PUT i.p.v. POST (HA REST API vereist POST voor /api/states/)
+
 ## 0.5.23
 - Gegenereerd pad wordt gepubliceerd als `sensor.ha_mcp_plus_endpoint` (Developer Tools → States)
 - Én als persistente notificatie (bel-icoon in HA UI)
