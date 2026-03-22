@@ -1,3 +1,7 @@
+## 0.5.26
+- Fix: FastMCP import volgorde gewijzigd — importeer nu eerst `fastmcp.FastMCP` (heeft `http_app`), dan pas `mcp.server.fastmcp.FastMCP`, dan `mcp.server.mcpserver.MCPServer`
+- Dit was de oorzaak van de `AttributeError: 'FastMCP' object has no attribute 'http_app'` crash
+
 ## 0.5.25
 - Gegenereerd pad wordt primair geschreven naar `/config/ha_mcp_plus_path.txt`
 - Zichtbaar via Bestandsbeheerder of Studio Code Server in HA (gegarandeerd via config:rw)

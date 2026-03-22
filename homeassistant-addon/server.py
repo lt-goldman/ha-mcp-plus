@@ -20,9 +20,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import PlainTextResponse
 
 try:
-    from mcp.server.mcpserver import MCPServer as FastMCP
+    from fastmcp import FastMCP
 except ImportError:
-    from mcp.server.fastmcp import FastMCP
+    try:
+        from mcp.server.fastmcp import FastMCP
+    except ImportError:
+        from mcp.server.mcpserver import MCPServer as FastMCP
 
 import importlib.metadata
 try:
