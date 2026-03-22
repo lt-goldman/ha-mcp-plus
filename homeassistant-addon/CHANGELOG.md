@@ -1,3 +1,7 @@
+## 0.5.23
+- Gegenereerd pad wordt gepubliceerd als `sensor.ha_mcp_plus_endpoint` (Developer Tools → States)
+- Én als persistente notificatie (bel-icoon in HA UI)
+
 ## 0.5.22
 - Gegenereerd pad wordt nu ook geschreven naar HA Systeem Logboek (Instellingen → Systeem → Logboek)
 - Zichtbaar als waarschuwing van `ha_mcp_plus` — ook als Configuration tab niet ververst

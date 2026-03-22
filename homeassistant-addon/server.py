@@ -74,33 +74,61 @@ def _inject_ha_token(options: dict) -> None:
 
 # ── Secret path ───────────────────────────────────────────────
 
-def _notify_system_log(path: str, port: int) -> None:
-    """Write the generated MCP path as a warning to the HA system log.
-    Visible in HA Settings → System → Logboek."""
+def _publish_path_to_ha(path: str, port: int) -> None:
+    """Publish the generated path via two HA mechanisms:
+    1. sensor.ha_mcp_plus_endpoint state (Developer Tools → States)
+    2. persistent_notification (bell icon in HA UI)
+    """
     token = os.environ.get("SUPERVISOR_TOKEN", "")
     if not token:
         return
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+    # 1. Set a HA sensor state — always visible in Developer Tools → States
     try:
-        r = httpx.post(
-            "http://supervisor/core/api/services/system_log/write",
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        r = httpx.put(
+            "http://supervisor/core/api/states/sensor.ha_mcp_plus_endpoint",
+            headers=headers,
             json={
-                "message": (
-                    f"HA MCP Plus — jouw MCP pad is: {path}  "
-                    f"(poort {port}). "
-                    f"Stel dit in via de Configuration tab van de addon en herstart."
-                ),
-                "level": "warning",
-                "logger": "ha_mcp_plus",
+                "state": path,
+                "attributes": {
+                    "friendly_name": "HA MCP Plus — actief pad",
+                    "port": port,
+                    "icon": "mdi:server-network",
+                    "url": f"http://jouw-ha-ip:{port}{path}",
+                },
             },
             timeout=5,
         )
-        if r.status_code in (200, 204):
-            log.info("[Security] Path written to HA system log (Instellingen → Systeem → Logboek)")
+        if r.status_code in (200, 201):
+            log.info("[Security] Path set as sensor.ha_mcp_plus_endpoint (Developer Tools → States)")
         else:
-            log.warning(f"[Security] system_log write returned {r.status_code}: {r.text}")
+            log.warning(f"[Security] sensor state write returned {r.status_code}: {r.text}")
     except Exception as e:
-        log.warning(f"Could not write to HA system log: {e}")
+        log.warning(f"Could not set sensor state: {e}")
+
+    # 2. Persistent notification — bell icon in HA UI
+    try:
+        r = httpx.post(
+            "http://supervisor/core/api/services/persistent_notification/create",
+            headers=headers,
+            json={
+                "notification_id": "ha_mcp_plus_path",
+                "title": "HA MCP Plus — stel je MCP pad in",
+                "message": (
+                    f"Jouw gegenereerde MCP pad is:\n\n"
+                    f"`{path}`\n\n"
+                    f"Kopieer dit naar de **Configuration tab** van de addon en herstart."
+                ),
+            },
+            timeout=5,
+        )
+        if r.status_code in (200, 201):
+            log.info("[Security] Persistent notification created (bel-icoon in HA)")
+        else:
+            log.warning(f"[Security] notification returned {r.status_code}: {r.text}")
+    except Exception as e:
+        log.warning(f"Could not create notification: {e}")
 
 
 def _write_path_to_addon_options(path: str, options: dict) -> None:
@@ -148,7 +176,7 @@ def resolve_secret_path(options: dict, port: int) -> str:
     log.info("[Security] Herstart de addon daarna om te activeren.")
     log.info("=" * 60)
 
-    _notify_system_log(generated, port)
+    _publish_path_to_ha(generated, port)
     _write_path_to_addon_options(generated, options)
 
     raise SystemExit(0)
