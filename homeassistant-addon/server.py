@@ -101,6 +101,18 @@ def _notify_endpoint(path: str, port: int) -> None:
         log.warning(f"Could not post HA notification: {e}")
 
 
+def _write_path_to_config(path: str) -> None:
+    """Write the active path to /config so it's readable via File Editor / Studio Code Server."""
+    try:
+        with open("/config/ha_mcp_plus_path.txt", "w") as f:
+            f.write(f"MCP endpoint pad: {path}\n")
+            f.write(f"Poort: 9584\n")
+            f.write(f"Voorbeeld: http://jouw-ha-ip:9584{path}\n")
+        log.info("[Security] Active path written to /config/ha_mcp_plus_path.txt")
+    except Exception as e:
+        log.warning(f"Could not write path to /config: {e}")
+
+
 def _write_path_to_addon_options(path: str) -> None:
     """Write the generated path back to addon options via Supervisor API.
     This makes it visible in the Configuration tab on the addon info page."""
@@ -148,6 +160,7 @@ def resolve_secret_path(options: dict) -> str:
         with open(GENERATED_PATH_FILE) as f:
             path = f.read().strip()
         if path:
+            _write_path_to_config(path)
             _write_path_to_addon_options(path)
             return path
 
@@ -157,6 +170,7 @@ def resolve_secret_path(options: dict) -> str:
             f.write(path)
     except Exception as e:
         log.warning(f"Could not persist generated path: {e}")
+    _write_path_to_config(path)
     _write_path_to_addon_options(path)
     return path
 
