@@ -1,3 +1,6 @@
+## 0.5.19
+- Security: gegenereerd MCP pad wordt teruggeschreven naar addon options — zichtbaar in de Configuration tab op de addon info pagina
+
 ## 0.5.18
 - Security: actief MCP pad zichtbaar als persistente HA notificatie (bel-icoon in HA UI) bij elke start
 

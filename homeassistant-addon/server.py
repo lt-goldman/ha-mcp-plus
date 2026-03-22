@@ -101,11 +101,43 @@ def _notify_endpoint(path: str, port: int) -> None:
         log.warning(f"Could not post HA notification: {e}")
 
 
+def _write_path_to_addon_options(path: str) -> None:
+    """Write the generated path back to addon options via Supervisor API.
+    This makes it visible in the Configuration tab on the addon info page."""
+    token = os.environ.get("SUPERVISOR_TOKEN", "")
+    if not token:
+        return
+    try:
+        # Read current options
+        r = httpx.get(
+            "http://supervisor/addons/self/options/config",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5,
+        )
+        if r.status_code != 200:
+            return
+        current = r.json().get("data", {})
+        # Only write back if path differs to avoid unnecessary restarts
+        if current.get("mcp_secret_path", "") == path:
+            return
+        current["mcp_secret_path"] = path
+        httpx.post(
+            "http://supervisor/addons/self/options",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={"options": current},
+            timeout=5,
+        )
+        log.info(f"[Security] Active MCP path written to addon Configuration tab")
+    except Exception as e:
+        log.warning(f"Could not write path to addon options: {e}")
+
+
 def resolve_secret_path(options: dict) -> str:
     """
     Return the MCP secret path.
     - If configured and not the old default '/mcp': use as-is.
-    - Otherwise: generate a UUID-based path once and persist it.
+    - Otherwise: generate a UUID-based path once, persist it, and
+      write it back to the addon options (visible in Configuration tab).
     """
     configured = options.get("mcp_secret_path", "").strip()
     if configured and configured != "/mcp":
@@ -116,6 +148,7 @@ def resolve_secret_path(options: dict) -> str:
         with open(GENERATED_PATH_FILE) as f:
             path = f.read().strip()
         if path:
+            _write_path_to_addon_options(path)
             return path
 
     path = f"/mcp-{uuid.uuid4().hex[:16]}"
@@ -124,6 +157,7 @@ def resolve_secret_path(options: dict) -> str:
             f.write(path)
     except Exception as e:
         log.warning(f"Could not persist generated path: {e}")
+    _write_path_to_addon_options(path)
     return path
 
 
