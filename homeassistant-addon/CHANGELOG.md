@@ -1,3 +1,10 @@
+## 0.5.20
+- Security: `mcp_secret_path` leeg laten genereert automatisch een uniek pad bij eerste start
+- Na generatie wordt het pad opgeslagen in de Configuration tab via Supervisor API, daarna stopt de addon — herstart vereist
+- Bij herstart is het pad ingesteld en de addon draait normaal
+- Verwijderd: auto-generatie via `/data/generated_mcp_path.txt` en HA notificatie (te onbetrouwbaar)
+- `mcp_secret_path: /mcp` is nu expliciet verboden (geeft foutmelding bij opstarten)
+
 ## 0.5.19
 - Security: gegenereerd MCP pad wordt teruggeschreven naar addon options — zichtbaar in de Configuration tab op de addon info pagina
 

@@ -41,8 +41,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("ha-mcp-plus")
 
-OPTIONS_FILE       = "/data/options.json"
-GENERATED_PATH_FILE = "/data/generated_mcp_path.txt"
+OPTIONS_FILE = "/data/options.json"
 
 
 # ── Options ───────────────────────────────────────────────────
@@ -75,104 +74,66 @@ def _inject_ha_token(options: dict) -> None:
 
 # ── Secret path ───────────────────────────────────────────────
 
-def _notify_endpoint(path: str, port: int) -> None:
-    """Post a persistent HA notification with the active MCP endpoint."""
+def _write_path_to_addon_options(path: str, options: dict) -> bool:
+    """Write the generated path to addon options via Supervisor API.
+    Returns True on success so we know whether to prompt restart."""
     token = os.environ.get("SUPERVISOR_TOKEN", "")
     if not token:
-        return
+        return False
     try:
-        httpx.post(
-            "http://supervisor/core/api/services/persistent_notification/create",
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={
-                "notification_id": "ha_mcp_plus_endpoint",
-                "title": "HA MCP Plus — actief endpoint",
-                "message": (
-                    f"Het MCP server pad is:\n\n"
-                    f"**Pad:** `{path}`\n"
-                    f"**Poort:** `{port}`\n\n"
-                    f"Gebruik dit pad in je Claude / MCP client configuratie."
-                ),
-            },
-            timeout=5,
-        )
-        log.info(f"[Security] Endpoint notification posted to HA UI")
-    except Exception as e:
-        log.warning(f"Could not post HA notification: {e}")
-
-
-def _write_path_to_config(path: str) -> None:
-    """Write the active path to /config so it's readable via File Editor / Studio Code Server."""
-    try:
-        with open("/config/ha_mcp_plus_path.txt", "w") as f:
-            f.write(f"MCP endpoint pad: {path}\n")
-            f.write(f"Poort: 9584\n")
-            f.write(f"Voorbeeld: http://jouw-ha-ip:9584{path}\n")
-        log.info("[Security] Active path written to /config/ha_mcp_plus_path.txt")
-    except Exception as e:
-        log.warning(f"Could not write path to /config: {e}")
-
-
-def _write_path_to_addon_options(path: str) -> None:
-    """Write the generated path back to addon options via Supervisor API.
-    This makes it visible in the Configuration tab on the addon info page."""
-    token = os.environ.get("SUPERVISOR_TOKEN", "")
-    if not token:
-        return
-    try:
-        # Read current options
-        r = httpx.get(
-            "http://supervisor/addons/self/options/config",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=5,
-        )
-        if r.status_code != 200:
-            return
-        current = r.json().get("data", {})
-        # Only write back if path differs to avoid unnecessary restarts
-        if current.get("mcp_secret_path", "") == path:
-            return
+        current = dict(options)
         current["mcp_secret_path"] = path
-        httpx.post(
+        r = httpx.post(
             "http://supervisor/addons/self/options",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
             json={"options": current},
             timeout=5,
         )
-        log.info(f"[Security] Active MCP path written to addon Configuration tab")
+        if r.status_code in (200, 204):
+            log.info("[Security] Generated path written to addon Configuration tab")
+            return True
+        log.warning(f"[Security] Supervisor options write returned {r.status_code}: {r.text}")
     except Exception as e:
         log.warning(f"Could not write path to addon options: {e}")
+    return False
 
 
 def resolve_secret_path(options: dict) -> str:
     """
     Return the MCP secret path.
-    - If configured and not the old default '/mcp': use as-is.
-    - Otherwise: generate a UUID-based path once, persist it, and
-      write it back to the addon options (visible in Configuration tab).
+    - If configured and not the insecure default '/mcp': use as-is.
+    - If empty: auto-generate a unique path, write it to the Configuration tab
+      via the Supervisor API, then exit cleanly so the user restarts the addon.
     """
-    configured = options.get("mcp_secret_path", "").strip()
-    if configured and configured != "/mcp":
-        return configured if configured.startswith("/") else f"/{configured}"
+    path = options.get("mcp_secret_path", "").strip()
 
-    # Use or generate a persistent random path
-    if os.path.exists(GENERATED_PATH_FILE):
-        with open(GENERATED_PATH_FILE) as f:
-            path = f.read().strip()
-        if path:
-            _write_path_to_config(path)
-            _write_path_to_addon_options(path)
-            return path
+    if path and path not in ("/mcp", "mcp"):
+        return path if path.startswith("/") else f"/{path}"
 
-    path = f"/mcp-{uuid.uuid4().hex[:16]}"
-    try:
-        with open(GENERATED_PATH_FILE, "w") as f:
-            f.write(path)
-    except Exception as e:
-        log.warning(f"Could not persist generated path: {e}")
-    _write_path_to_config(path)
-    _write_path_to_addon_options(path)
-    return path
+    if path in ("/mcp", "mcp"):
+        log.error("=" * 60)
+        log.error("CONFIGURATIEFOUT: '/mcp' is niet toegestaan als pad (te makkelijk te raden).")
+        log.error("Verander mcp_secret_path naar een uniek pad in de Configuration tab.")
+        log.error("=" * 60)
+        raise SystemExit(1)
+
+    # Path is empty — auto-generate, write to Configuration tab, then exit
+    generated = f"/mcp-{uuid.uuid4().hex[:16]}"
+    log.info("=" * 60)
+    log.info("[Security] mcp_secret_path is leeg — automatisch gegenereerd pad:")
+    log.info(f"[Security]   {generated}")
+
+    written = _write_path_to_addon_options(generated, options)
+
+    log.info("")
+    if written:
+        log.info("[Security] Het pad is opgeslagen in de Configuration tab.")
+        log.info("[Security] >>> START DE ADDON OPNIEUW — dan is het actief. <<<")
+    else:
+        log.info("[Security] Kon het pad niet automatisch opslaan.")
+        log.info(f"[Security] Stel handmatig in: mcp_secret_path: {generated}")
+    log.info("=" * 60)
+    raise SystemExit(0)
 
 
 # ── Network / IP filtering ────────────────────────────────────
@@ -241,8 +202,6 @@ def main():
     path    = resolve_secret_path(options)
     networks = resolve_allowed_networks(options)
     sandbox_enabled = bool(options.get("sandbox_enabled", False))
-
-    _notify_endpoint(path, port)
 
     log.info("=" * 60)
     log.info("ha-mcp-plus starting")

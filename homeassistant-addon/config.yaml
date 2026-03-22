@@ -4,7 +4,7 @@ description: >
   Automatically detects installed addons (InfluxDB, Grafana, Node-RED,
   Frigate, ESPHome) and activates the corresponding tools.
   No URL configuration needed — everything is auto-discovered.
-version: "0.5.19"
+version: "0.5.20"
 slug: "ha_mcp_plus"
 init: false
 arch:
@@ -34,7 +34,19 @@ ports_description:
 # Leave empty if the addon uses anonymous access.
 # ─────────────────────────────────────────────────────────────
 schema:
-  mcp_secret_path: str
+  # ── Security ──────────────────────────────────────────────────
+  # Verplicht: stel een uniek geheim pad in voor de MCP endpoint.
+  # Laat leeg om automatisch een uniek pad te laten genereren bij eerste start.
+  # Voorbeeld: /mcp-mijngeheimpad123  (gebruik NOOIT '/mcp')
+  mcp_secret_path: str?
+
+  # Comma-separated list of allowed CIDRs (e.g. "192.168.1.0/24,10.0.0.0/8").
+  # Leave empty to auto-detect the local subnet. Loopback is always allowed.
+  allowed_networks: str?
+
+  # Enable the Python sandbox tool (code execution). Disabled by default.
+  # Only enable when actively using analysis features — disable when not needed.
+  sandbox_enabled: bool?
 
   # Home Assistant — only needed when running outside HA (e.g. local dev / Claude Desktop)
   # Leave empty when running as a HA addon; the Supervisor token is used automatically.
@@ -57,19 +69,6 @@ schema:
 
   # Music Assistant — long-lived token from MA Settings → Authentication
   ma_token: password?
-
-  # ── Security ──────────────────────────────────────────────────
-  # Leave mcp_secret_path empty to auto-generate a random path on first start.
-  # The active path is always shown in the addon log on startup.
-  mcp_secret_path: str?
-
-  # Comma-separated list of allowed CIDRs (e.g. "192.168.1.0/24,10.0.0.0/8").
-  # Leave empty to auto-detect the local subnet. Loopback is always allowed.
-  allowed_networks: str?
-
-  # Enable the Python sandbox tool (code execution). Disabled by default.
-  # Only enable when actively using analysis features — disable when not needed.
-  sandbox_enabled: bool?
 
   log_level: list(trace|debug|info|notice|warning|error|fatal)?
 
