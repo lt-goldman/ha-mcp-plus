@@ -167,17 +167,28 @@ def resolve_secret_path(options: dict, port: int) -> str:
     # Path is empty or the insecure old default — auto-generate
     generated = f"/mcp-{uuid.uuid4().hex[:16]}"
 
-    log.info("=" * 60)
-    log.info("[Security] mcp_secret_path is leeg of onveilig — nieuw pad gegenereerd:")
-    log.info(f"[Security]   {generated}")
-    log.info("[Security] Dit pad wordt geschreven naar:")
-    log.info("[Security]   1. HA Logboek (Instellingen → Systeem → Logboek)")
-    log.info("[Security]   2. Configuration tab van deze addon")
-    log.info("[Security] Herstart de addon daarna om te activeren.")
-    log.info("=" * 60)
+    # Write to /config/ha_mcp_plus_path.txt — guaranteed via config:rw mount
+    try:
+        with open("/config/ha_mcp_plus_path.txt", "w") as f:
+            f.write(f"HA MCP Plus — jouw MCP pad\n")
+            f.write(f"=" * 40 + "\n")
+            f.write(f"mcp_secret_path: {generated}\n\n")
+            f.write(f"Kopieer de bovenste regel naar de Configuration tab\n")
+            f.write(f"van de HA MCP Plus addon en herstart de addon.\n")
+        log.info(f"[Security] Pad geschreven naar /config/ha_mcp_plus_path.txt")
+    except Exception as e:
+        log.warning(f"Could not write to /config: {e}")
 
     _publish_path_to_ha(generated, port)
     _write_path_to_addon_options(generated, options)
+
+    log.info("=" * 60)
+    log.info("[Security] NIEUW MCP PAD GEGENEREERD:")
+    log.info(f"[Security]   {generated}")
+    log.info("[Security] Vind dit pad in /config/ha_mcp_plus_path.txt")
+    log.info("[Security] (zichtbaar via Bestandsbeheerder in HA)")
+    log.info("[Security] Stel het in via Configuration tab en herstart.")
+    log.info("=" * 60)
 
     raise SystemExit(0)
 

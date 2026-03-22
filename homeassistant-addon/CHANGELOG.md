@@ -1,3 +1,7 @@
+## 0.5.25
+- Gegenereerd pad wordt primair geschreven naar `/config/ha_mcp_plus_path.txt`
+- Zichtbaar via Bestandsbeheerder of Studio Code Server in HA (gegarandeerd via config:rw)
+
 ## 0.5.24
 - Fix: sensor state schrijven gebruikte PUT i.p.v. POST (HA REST API vereist POST voor /api/states/)
 
