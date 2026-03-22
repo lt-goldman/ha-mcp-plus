@@ -124,6 +124,21 @@ changes that cannot be undone.
     except Exception as e:
         log.warning(f"Could not load homeassistant plugin: {e}")
 
+    # Register Python sandbox (always active)
+    try:
+        from plugins.sandbox import SandboxPlugin
+        from core.plugin_base import PluginConfig
+        sandbox_plugin = SandboxPlugin()
+        influx_url = ""
+        if "InfluxDB" in active_plugins:
+            _, influx_cfg = active_plugins["InfluxDB"]
+            influx_url = influx_cfg.url
+        sandbox_cfg = PluginConfig(url="", token="", extra={**options, "_influx_url": influx_url})
+        sandbox_plugin.register_tools(mcp, sandbox_cfg)
+        log.info("Registering tools: Sandbox (always active)")
+    except Exception as e:
+        log.warning(f"Could not load sandbox plugin: {e}")
+
     log.info(f"Starting MCP server — {len(active_plugins)} plugin(s) active")
     mcp.run(transport="streamable-http")
 

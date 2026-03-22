@@ -1,3 +1,8 @@
+## 0.5.16
+- Nieuw: Python Sandbox tool (`python_sandbox`) — altijd actief, voert willekeurige Python code uit server-side
+- Pre-geconfigureerd met InfluxDB, numpy, pandas, requests en HA Supervisor toegang
+- Iteratiebescherming via `attempt`/`max_attempts` parameters — stopt na max pogingen en vraagt om gebruikersinput
+
 ## 0.5.15
 - Fix: Music Assistant plugin herschreven met WebSocket API (was HTTP REST, werkt niet)
 
