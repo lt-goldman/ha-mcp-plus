@@ -1,3 +1,6 @@
+## 0.5.18
+- Security: actief MCP pad zichtbaar als persistente HA notificatie (bel-icoon in HA UI) bij elke start
+
 ## 0.5.17
 - Security: IP filtering middleware — alleen verbindingen vanuit toegestane subnets worden geaccepteerd (auto-detect lokaal subnet, uitbreidbaar via `allowed_networks`)
 - Security: `sandbox_enabled` config optie — sandbox staat standaard UIT, expliciet aan te zetten

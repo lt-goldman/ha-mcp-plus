@@ -30,6 +30,8 @@ try:
 except Exception:
     _mcp_version = "unknown"
 
+import httpx
+
 from core.discovery import discover_and_load_plugins
 from core.plugin_base import PluginConfig
 
@@ -72,6 +74,32 @@ def _inject_ha_token(options: dict) -> None:
 
 
 # ── Secret path ───────────────────────────────────────────────
+
+def _notify_endpoint(path: str, port: int) -> None:
+    """Post a persistent HA notification with the active MCP endpoint."""
+    token = os.environ.get("SUPERVISOR_TOKEN", "")
+    if not token:
+        return
+    try:
+        httpx.post(
+            "http://supervisor/core/api/services/persistent_notification/create",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={
+                "notification_id": "ha_mcp_plus_endpoint",
+                "title": "HA MCP Plus — actief endpoint",
+                "message": (
+                    f"Het MCP server pad is:\n\n"
+                    f"**Pad:** `{path}`\n"
+                    f"**Poort:** `{port}`\n\n"
+                    f"Gebruik dit pad in je Claude / MCP client configuratie."
+                ),
+            },
+            timeout=5,
+        )
+        log.info(f"[Security] Endpoint notification posted to HA UI")
+    except Exception as e:
+        log.warning(f"Could not post HA notification: {e}")
+
 
 def resolve_secret_path(options: dict) -> str:
     """
@@ -166,14 +194,14 @@ def main():
     networks = resolve_allowed_networks(options)
     sandbox_enabled = bool(options.get("sandbox_enabled", False))
 
+    _notify_endpoint(path, port)
+
     log.info("=" * 60)
     log.info("ha-mcp-plus starting")
     log.info(f"MCP SDK version: {_mcp_version}")
     log.info(f"Endpoint:        0.0.0.0:{port}{path}")
     log.info(f"Sandbox:         {'ENABLED' if sandbox_enabled else 'disabled'}")
     log.info(f"Allowed networks: {', '.join(str(n) for n in networks)}")
-    log.info("=" * 60)
-    log.info(f"  *** MCP path: {path} ***")
     log.info("=" * 60)
 
     # Discover which addons are running and activate plugins
