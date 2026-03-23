@@ -22,90 +22,105 @@ from core.plugin_base import BasePlugin, PluginConfig
 log = logging.getLogger("ha-mcp-plus.discovery")
 
 SUPERVISOR_URL = "http://supervisor"
+HA_REST_URL    = "http://homeassistant"
 
 
 def _supervisor_token() -> str:
-    # 1. Try environment variables
+    """Return SUPERVISOR_TOKEN from env, s6 files, or /proc/1/environ."""
     token = (
         os.environ.get("SUPERVISOR_TOKEN") or
         os.environ.get("HASSIO_TOKEN") or
-        os.environ.get("HA_TOKEN") or
         ""
     )
+    if token:
+        return token
 
-    # 2. Fallback: read from s6 container environment files (s6-overlay v2/v3)
-    if not token:
-        for path in [
-            "/var/run/s6/container_environment/SUPERVISOR_TOKEN",
-            "/run/s6/container_environment/SUPERVISOR_TOKEN",
-            "/var/run/s6/container_environment/HASSIO_TOKEN",
-            "/run/s6/container_environment/HASSIO_TOKEN",
-        ]:
-            try:
-                with open(path) as f:
-                    token = f.read().strip()
-                if token:
-                    log.info(f"Supervisor token loaded from {path}")
-                    break
-            except FileNotFoundError:
-                pass
-
-    # 3. Last resort: read from PID1 environment (Docker-injected vars)
-    if not token:
+    for path in [
+        "/var/run/s6/container_environment/SUPERVISOR_TOKEN",
+        "/run/s6/container_environment/SUPERVISOR_TOKEN",
+        "/var/run/s6/container_environment/HASSIO_TOKEN",
+        "/run/s6/container_environment/HASSIO_TOKEN",
+    ]:
         try:
-            with open("/proc/1/environ", "rb") as f:
-                for item in f.read().split(b"\x00"):
-                    for key in (b"SUPERVISOR_TOKEN=", b"HASSIO_TOKEN="):
-                        if item.startswith(key):
-                            token = item[len(key):].decode().strip()
-                            if token:
-                                log.info(f"Supervisor token loaded from /proc/1/environ ({key.decode().rstrip('=')})")
-                                break
-                    if token:
-                        break
-        except Exception as e:
-            log.debug(f"Could not read /proc/1/environ: {e}")
+            with open(path) as f:
+                token = f.read().strip()
+            if token:
+                log.info(f"Supervisor token loaded from {path}")
+                return token
+        except FileNotFoundError:
+            pass
 
-    if not token:
-        auth_vars = [k for k in os.environ if any(x in k.upper() for x in ("TOKEN", "SUPERVISOR", "HASSIO"))]
-        log.error(
-            f"No Supervisor token found anywhere (env vars, s6 files, /proc/1/environ). "
-            f"Auth-related env vars present: {auth_vars or 'none'}. "
-            f"Ensure hassio_api: true and hassio_role: admin in config.yaml."
-        )
-    return token
+    try:
+        with open("/proc/1/environ", "rb") as f:
+            for item in f.read().split(b"\x00"):
+                for key in (b"SUPERVISOR_TOKEN=", b"HASSIO_TOKEN="):
+                    if item.startswith(key):
+                        token = item[len(key):].decode().strip()
+                        if token:
+                            log.info(f"Supervisor token loaded from /proc/1/environ")
+                            return token
+    except Exception as e:
+        log.debug(f"Could not read /proc/1/environ: {e}")
+
+    return ""
+
+
+def _ha_rest_token() -> str:
+    """Return long-lived HA token (set by server.py from ha_token option)."""
+    return os.environ.get("HA_REST_TOKEN", "")
+
+
+def _sup_request(method: str, path: str, timeout: int = 5) -> Optional[httpx.Response]:
+    """
+    Make a Supervisor API request.
+    Tries direct Supervisor API first; falls back to HA REST proxy if no supervisor token.
+    """
+    sup_token = _supervisor_token()
+    if sup_token:
+        url = f"{SUPERVISOR_URL}{path}"
+        headers = {"Authorization": f"Bearer {sup_token}", "Content-Type": "application/json"}
+        try:
+            r = httpx.request(method, url, headers=headers, timeout=timeout)
+            return r
+        except Exception as e:
+            log.debug(f"Direct Supervisor request failed: {e}")
+
+    # Fallback: HA REST API proxy (/api/hassio/...)
+    ha_token = _ha_rest_token()
+    if ha_token:
+        url = f"{HA_REST_URL}/api/hassio{path}"
+        headers = {"Authorization": f"Bearer {ha_token}", "Content-Type": "application/json"}
+        log.debug(f"Falling back to HA REST proxy for {path}")
+        try:
+            r = httpx.request(method, url, headers=headers, timeout=timeout)
+            return r
+        except Exception as e:
+            log.debug(f"HA REST proxy request failed: {e}")
+
+    log.error(f"No token available for Supervisor API request to {path}")
+    return None
 
 
 def _headers() -> dict:
-    token = _supervisor_token()
+    """Legacy helper kept for compatibility."""
+    token = _supervisor_token() or _ha_rest_token()
     if not token:
         return {"Content-Type": "application/json"}
-    return {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
+    return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
 
 def get_addon_info(slug: str) -> Optional[dict]:
     """Fetch addon info from Supervisor API. Returns None if not found/running."""
     try:
-        r = httpx.get(
-            f"{SUPERVISOR_URL}/addons/{slug}/info",
-            headers=_headers(),
-            timeout=5,
-        )
+        r = _sup_request("GET", f"/addons/{slug}/info")
+        if r is None:
+            return None
         if r.status_code == 200:
             return r.json().get("data", {})
         if r.status_code == 404:
             log.debug(f"Addon {slug} not installed (404)")
         else:
             log.warning(f"Supervisor returned HTTP {r.status_code} for addon {slug}")
-        return None
-    except httpx.ConnectError:
-        log.error(f"Cannot connect to Supervisor API — is this running as a HA addon?")
-        return None
-    except httpx.TimeoutException:
-        log.error(f"Supervisor API timeout while fetching addon info for {slug}")
         return None
     except Exception as e:
         log.error(f"Unexpected error fetching addon info for {slug}: {e}")
@@ -193,11 +208,9 @@ def load_all_plugins() -> List[Type[BasePlugin]]:
 def list_all_addons() -> list:
     """Fetch all installed addons from Supervisor API for diagnostics."""
     try:
-        r = httpx.get(
-            f"{SUPERVISOR_URL}/addons",
-            headers=_headers(),
-            timeout=10,
-        )
+        r = _sup_request("GET", "/addons", timeout=10)
+        if r is None:
+            return []
         if r.status_code == 200:
             return r.json().get("data", {}).get("addons", [])
         log.warning(f"Supervisor /addons returned HTTP {r.status_code}")

@@ -1,3 +1,9 @@
+## 0.6.6
+- Fix: Supervisor API fallback via HA REST proxy (`/api/hassio/...`) wanneer geen SUPERVISOR_TOKEN beschikbaar is
+- Gebruikt `ha_token` uit config als long-lived token voor de proxy
+- `supervisor_health` toont nu welke methode gebruikt wordt (direct vs proxy)
+- discovery.py: zelfde proxy-fallback voor addon discovery bij opstarten
+
 ## 0.6.5
 - Fix: Supervisor token ook ophalen uit `/proc/1/environ` als fallback (s6 init heeft token maar geeft hem niet altijd door aan child processes)
 - `supervisor_health` toont nu ook of token via `/proc/1` gevonden werd

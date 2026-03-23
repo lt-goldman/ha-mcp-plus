@@ -23,39 +23,64 @@ class SupervisorPlugin(BasePlugin):
     def register_tools(self, mcp, cfg: PluginConfig) -> None:
         supervisor_url = "http://supervisor"
 
-        def _get_token() -> str:
-            # 1. Current process env
-            token = os.environ.get("SUPERVISOR_TOKEN") or os.environ.get("HASSIO_TOKEN", "")
-            if token:
-                return token
-            # 2. PID 1 env (s6 init may hold it even if not inherited)
+        ha_rest_url = "http://homeassistant"
+        ha_token = cfg.extra.get("ha_token", "").strip()
+
+        def _get_token() -> tuple[str, str]:
+            """Returns (token, base_url) — prefers direct Supervisor, falls back to HA REST proxy."""
+            # 1. SUPERVISOR_TOKEN / HASSIO_TOKEN from env
+            sup = os.environ.get("SUPERVISOR_TOKEN") or os.environ.get("HASSIO_TOKEN", "")
+            if sup:
+                return sup, supervisor_url
+            # 2. s6 container env files
+            for path in [
+                "/var/run/s6/container_environment/SUPERVISOR_TOKEN",
+                "/run/s6/container_environment/SUPERVISOR_TOKEN",
+            ]:
+                try:
+                    with open(path) as f:
+                        t = f.read().strip()
+                    if t:
+                        return t, supervisor_url
+                except FileNotFoundError:
+                    pass
+            # 3. /proc/1/environ
             try:
                 with open("/proc/1/environ", "rb") as f:
                     for part in f.read().split(b"\x00"):
                         if part.startswith(b"SUPERVISOR_TOKEN="):
-                            return part.split(b"=", 1)[1].decode()
-                        if part.startswith(b"HASSIO_TOKEN="):
-                            return part.split(b"=", 1)[1].decode()
+                            t = part.split(b"=", 1)[1].decode().strip()
+                            if t:
+                                return t, supervisor_url
             except Exception:
                 pass
-            log.warning("[Supervisor] No SUPERVISOR_TOKEN or HASSIO_TOKEN found anywhere")
-            return ""
-
-        def _headers():
-            return {"Authorization": f"Bearer {_get_token()}", "Content-Type": "application/json"}
+            # 4. HA REST proxy via ha_token (long-lived HA admin token)
+            ha_rest = ha_token or os.environ.get("HA_REST_TOKEN", "")
+            if ha_rest:
+                log.info("[Supervisor] Using HA REST proxy (no SUPERVISOR_TOKEN found)")
+                return ha_rest, f"{ha_rest_url}/api/hassio"
+            log.warning("[Supervisor] No token available — all Supervisor calls will fail")
+            return "", supervisor_url
 
         def _sup(method: str, path: str, json: dict = None) -> dict:
-            full_url = f"{supervisor_url}{path}"
+            token, base = _get_token()
+            if not token:
+                return {"error": "No Supervisor token or ha_token configured"}
+            full_url = f"{base}{path}"
             try:
-                r = httpx.request(method, full_url, headers=_headers(), json=json, timeout=30)
+                r = httpx.request(
+                    method, full_url,
+                    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                    json=json, timeout=30,
+                )
                 if not r.is_success:
                     log.error(f"[Supervisor] HTTP {r.status_code} for {method} {path}: {r.text[:200]}")
                     return {"error": f"HTTP {r.status_code}", "detail": r.text[:200]}
                 data = r.json()
                 return data.get("data", data)
             except httpx.ConnectError:
-                log.error(f"[Supervisor] Cannot connect to Supervisor API at {supervisor_url}")
-                return {"error": "Cannot connect to Supervisor API"}
+                log.error(f"[Supervisor] Cannot connect to {full_url}")
+                return {"error": f"Cannot connect to {full_url}"}
             except httpx.TimeoutException:
                 log.error(f"[Supervisor] Timeout for {method} {path}")
                 return {"error": f"Timeout for {method} {path}"}
@@ -87,15 +112,15 @@ class SupervisorPlugin(BasePlugin):
         @mcp.tool()
         def supervisor_health() -> dict:
             """Check Supervisor API connectivity and token availability."""
-            sup_token = os.environ.get("SUPERVISOR_TOKEN", "")
-            hassio_token = os.environ.get("HASSIO_TOKEN", "")
-            token = _get_token()
+            token, base = _get_token()
+            via_proxy = base != supervisor_url
             return {
-                "SUPERVISOR_TOKEN_set": bool(sup_token),
-                "HASSIO_TOKEN_set": bool(hassio_token),
-                "token_from_proc1": bool(token) and not bool(sup_token or hassio_token),
+                "SUPERVISOR_TOKEN_set": bool(os.environ.get("SUPERVISOR_TOKEN")),
+                "HASSIO_TOKEN_set": bool(os.environ.get("HASSIO_TOKEN")),
+                "ha_token_configured": bool(ha_token or os.environ.get("HA_REST_TOKEN")),
+                "using_ha_rest_proxy": via_proxy,
                 "token_length": len(token),
-                "supervisor_url": supervisor_url,
+                "base_url": base,
                 "ping": _sup("GET", "/info"),
             }
 
