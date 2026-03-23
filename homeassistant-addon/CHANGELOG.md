@@ -1,3 +1,12 @@
+## 0.6.4
+- Fix: Supervisor tools proberen nu ook `HASSIO_TOKEN` als `SUPERVISOR_TOKEN` leeg is (compatibiliteit oudere HA versies)
+- Nieuw: `supervisor_health` tool — toont token-beschikbaarheid en Supervisor API bereikbaarheid voor diagnose
+- Log waarschuwing als geen token gevonden in omgeving
+
+## 0.6.3
+- Fix: SupervisorPlugin werd nooit geladen — expliciete registratie toegevoegd in server.py (net als filesystem/homeassistant plugins)
+- Fix: SupervisorPlugin gebruikte `ha_token` uit config i.p.v. `SUPERVISOR_TOKEN` env var (juiste auth voor Supervisor API)
+
 ## 0.6.2
 - Fix: InfluxDB v1 authenticatie — `influx_username` en `influx_password` toegevoegd aan config
 - InfluxDB v1 stuurt credentials als `?u=&p=` query params als geconfigureerd
