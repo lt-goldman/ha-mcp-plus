@@ -1,3 +1,9 @@
+## 0.5.30
+- ESPHome: `esphome_read_config` — lees bestaande YAML config
+- ESPHome: `esphome_write_config` — schrijf/maak nieuwe YAML config voor een device
+- ESPHome: `esphome_compile` — compileer firmware via ESPHome API
+- ESPHome: `esphome_upload` — OTA flash naar een online device
+
 ## 0.5.29
 - Verwijderd: IP filter middleware — Docker NAT maakt het onmogelijk om het echte client-IP te zien; alle verbindingen kwamen binnen als 172.30.32.1
 - Beveiliging rust nu volledig op het geheime pad (`mcp_secret_path`)
