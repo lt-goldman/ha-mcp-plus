@@ -1,3 +1,8 @@
+## 0.6.1
+- Fix: "Session not found" na addon herstart of inactiviteit
+- MCP server draait nu in stateless mode — geen server-side sessies, elke tool call is onafhankelijk
+- Fallback naar stateful mode als de FastMCP versie stateless_http niet ondersteunt
+
 ## 0.6.0
 - InfluxDB: auto-detectie van v1 (InfluxQL) vs v2 (Flux) via `/health` endpoint
 - InfluxDB v1: queries via `/query` met InfluxQL syntax

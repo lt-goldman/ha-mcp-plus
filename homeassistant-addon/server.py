@@ -213,9 +213,9 @@ def main():
         log.warning("No active plugins found. Is any supported addon running?")
 
     plugin_list = ", ".join(active_plugins.keys()) or "none"
-    mcp = FastMCP(
-        "ha-mcp-plus",
-        instructions=f"""
+    # Stateless mode: no server-side sessions — each request is independent.
+    # Prevents "Session not found" errors after addon restarts or inactivity.
+    instructions = f"""
 Extended Home Assistant MCP server.
 Active plugins: {plugin_list}
 
@@ -224,8 +224,15 @@ Available tool groups:
 
 Always ask for user confirmation before writing files, deploying flows, or making
 changes that cannot be undone.
-        """.strip(),
-    )
+    """.strip()
+
+    try:
+        mcp = FastMCP("ha-mcp-plus", stateless_http=True, instructions=instructions)
+        log.info("Session mode: stateless (no session expiry)")
+    except TypeError:
+        # Older FastMCP without stateless_http support
+        mcp = FastMCP("ha-mcp-plus", instructions=instructions)
+        log.warning("Session mode: stateful (stateless_http not supported by this FastMCP version)")
 
     # Register tools from each active plugin
     for name, (instance, cfg) in active_plugins.items():
