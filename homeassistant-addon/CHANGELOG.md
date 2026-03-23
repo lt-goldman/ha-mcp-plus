@@ -1,3 +1,8 @@
+## 0.6.7
+- Fix: Supervisor API vereist `X-Supervisor-Token` header, niet `Authorization: Bearer` — dit was de echte oorzaak van alle auth-fouten
+- Verwijderd: HA REST proxy fallback (`/api/hassio/`) — die route is geblacklist voor addons
+- discovery.py en supervisor.py gebruiken nu allebei de juiste header
+
 ## 0.6.6
 - Fix: Supervisor API fallback via HA REST proxy (`/api/hassio/...`) wanneer geen SUPERVISOR_TOKEN beschikbaar is
 - Gebruikt `ha_token` uit config als long-lived token voor de proxy

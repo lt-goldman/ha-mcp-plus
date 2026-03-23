@@ -22,18 +22,11 @@ from core.plugin_base import BasePlugin, PluginConfig
 log = logging.getLogger("ha-mcp-plus.discovery")
 
 SUPERVISOR_URL = "http://supervisor"
-HA_REST_URL    = "http://homeassistant"
-
-
 def _supervisor_token() -> str:
     """Return SUPERVISOR_TOKEN from env, s6 files, or /proc/1/environ."""
-    token = (
-        os.environ.get("SUPERVISOR_TOKEN") or
-        os.environ.get("HASSIO_TOKEN") or
-        ""
-    )
-    if token:
-        return token
+    for t in [os.environ.get("SUPERVISOR_TOKEN"), os.environ.get("HASSIO_TOKEN")]:
+        if t:
+            return t
 
     for path in [
         "/var/run/s6/container_environment/SUPERVISOR_TOKEN",
@@ -65,62 +58,32 @@ def _supervisor_token() -> str:
     return ""
 
 
-def _ha_rest_token() -> str:
-    """Return long-lived HA token (set by server.py from ha_token option)."""
-    return os.environ.get("HA_REST_TOKEN", "")
-
-
-def _sup_request(method: str, path: str, timeout: int = 5) -> Optional[httpx.Response]:
-    """
-    Make a Supervisor API request.
-    Tries direct Supervisor API first; falls back to HA REST proxy if no supervisor token.
-    """
-    sup_token = _supervisor_token()
-    if sup_token:
-        url = f"{SUPERVISOR_URL}{path}"
-        headers = {"Authorization": f"Bearer {sup_token}", "Content-Type": "application/json"}
-        try:
-            r = httpx.request(method, url, headers=headers, timeout=timeout)
-            return r
-        except Exception as e:
-            log.debug(f"Direct Supervisor request failed: {e}")
-
-    # Fallback: HA REST API proxy (/api/hassio/...)
-    ha_token = _ha_rest_token()
-    if ha_token:
-        url = f"{HA_REST_URL}/api/hassio{path}"
-        headers = {"Authorization": f"Bearer {ha_token}", "Content-Type": "application/json"}
-        log.debug(f"Falling back to HA REST proxy for {path}")
-        try:
-            r = httpx.request(method, url, headers=headers, timeout=timeout)
-            return r
-        except Exception as e:
-            log.debug(f"HA REST proxy request failed: {e}")
-
-    log.error(f"No token available for Supervisor API request to {path}")
-    return None
-
-
 def _headers() -> dict:
-    """Legacy helper kept for compatibility."""
-    token = _supervisor_token() or _ha_rest_token()
+    # Supervisor API requires X-Supervisor-Token header (not Authorization: Bearer)
+    token = _supervisor_token()
     if not token:
+        log.error("No Supervisor token found — addon discovery will not work")
         return {"Content-Type": "application/json"}
-    return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    return {"X-Supervisor-Token": token, "Content-Type": "application/json"}
 
 
 def get_addon_info(slug: str) -> Optional[dict]:
     """Fetch addon info from Supervisor API. Returns None if not found/running."""
     try:
-        r = _sup_request("GET", f"/addons/{slug}/info")
-        if r is None:
-            return None
+        r = httpx.get(
+            f"{SUPERVISOR_URL}/addons/{slug}/info",
+            headers=_headers(),
+            timeout=5,
+        )
         if r.status_code == 200:
             return r.json().get("data", {})
         if r.status_code == 404:
             log.debug(f"Addon {slug} not installed (404)")
         else:
             log.warning(f"Supervisor returned HTTP {r.status_code} for addon {slug}")
+        return None
+    except httpx.ConnectError:
+        log.error("Cannot connect to Supervisor API — is this running as a HA addon?")
         return None
     except Exception as e:
         log.error(f"Unexpected error fetching addon info for {slug}: {e}")
@@ -208,9 +171,7 @@ def load_all_plugins() -> List[Type[BasePlugin]]:
 def list_all_addons() -> list:
     """Fetch all installed addons from Supervisor API for diagnostics."""
     try:
-        r = _sup_request("GET", "/addons", timeout=10)
-        if r is None:
-            return []
+        r = httpx.get(f"{SUPERVISOR_URL}/addons", headers=_headers(), timeout=10)
         if r.status_code == 200:
             return r.json().get("data", {}).get("addons", [])
         log.warning(f"Supervisor /addons returned HTTP {r.status_code}")
@@ -230,7 +191,7 @@ def discover_and_load_plugins(addon_options: dict) -> Dict[str, tuple]:
     """
     # Diagnostic: verify token and log all installed addon slugs
     token = _supervisor_token()
-    log.info(f"Supervisor token: {'OK (' + str(len(token)) + ' chars)' if token else 'MISSING — addon discovery will not work'}")
+    log.info(f"Supervisor token: {'OK (' + str(len(token)) + ' chars) via X-Supervisor-Token' if token else 'MISSING — addon discovery will not work'}")
 
     all_addons = list_all_addons()
     if all_addons:
