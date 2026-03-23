@@ -24,7 +24,9 @@ class SupervisorPlugin(BasePlugin):
         supervisor_url = "http://supervisor"
 
         def _headers():
-            token = os.environ.get("SUPERVISOR_TOKEN", "")
+            token = os.environ.get("SUPERVISOR_TOKEN") or os.environ.get("HASSIO_TOKEN", "")
+            if not token:
+                log.warning("[Supervisor] No SUPERVISOR_TOKEN or HASSIO_TOKEN in environment")
             return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
         def _sup(method: str, path: str, json: dict = None) -> dict:
@@ -65,6 +67,20 @@ class SupervisorPlugin(BasePlugin):
                     }
                     for a in (addons if isinstance(addons, list) else [])
                 ],
+            }
+
+        @mcp.tool()
+        def supervisor_health() -> dict:
+            """Check Supervisor API connectivity and token availability."""
+            sup_token = os.environ.get("SUPERVISOR_TOKEN", "")
+            hassio_token = os.environ.get("HASSIO_TOKEN", "")
+            token_in_use = sup_token or hassio_token
+            return {
+                "SUPERVISOR_TOKEN_set": bool(sup_token),
+                "HASSIO_TOKEN_set": bool(hassio_token),
+                "token_length": len(token_in_use),
+                "supervisor_url": supervisor_url,
+                "ping": _sup("GET", "/info"),
             }
 
         @mcp.tool()
