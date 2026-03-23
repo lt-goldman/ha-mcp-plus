@@ -53,6 +53,8 @@ def load_options() -> dict:
     return {
         "ha_token":        os.environ.get("HA_TOKEN", ""),
         "influx_token":    os.environ.get("INFLUX_TOKEN", ""),
+        "influx_username": os.environ.get("INFLUX_USERNAME", ""),
+        "influx_password": os.environ.get("INFLUX_PASSWORD", ""),
         "influx_org":      os.environ.get("INFLUX_ORG", "homeassistant"),
         "influx_bucket":   os.environ.get("INFLUX_BUCKET", "homeassistant"),
         "grafana_token":   os.environ.get("GRAFANA_TOKEN", ""),

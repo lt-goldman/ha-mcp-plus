@@ -19,10 +19,12 @@ class InfluxDBPlugin(BasePlugin):
     CONFIG_KEY    = "influx_token"
 
     def register_tools(self, mcp, cfg: PluginConfig) -> None:
-        url    = cfg.url
-        token  = cfg.token
-        org    = cfg.extra.get("influx_org", "homeassistant")
-        bucket = cfg.extra.get("influx_bucket", "homeassistant")
+        url      = cfg.url
+        token    = cfg.token
+        org      = cfg.extra.get("influx_org", "homeassistant")
+        bucket   = cfg.extra.get("influx_bucket", "homeassistant")
+        username = cfg.extra.get("influx_username", "")
+        password = cfg.extra.get("influx_password", "")
 
         # ── Version detection ──────────────────────────────────────
         _version = None
@@ -44,10 +46,14 @@ class InfluxDBPlugin(BasePlugin):
         # ── v1 query (InfluxQL) ────────────────────────────────────
         def _query_v1(influxql: str, database: str = None) -> dict:
             db = database or bucket
+            params = {"db": db, "q": influxql}
+            if username:
+                params["u"] = username
+                params["p"] = password
             try:
                 r = httpx.get(
                     f"{url}/query",
-                    params={"db": db, "q": influxql},
+                    params=params,
                     timeout=15,
                 )
                 if not r.is_success:

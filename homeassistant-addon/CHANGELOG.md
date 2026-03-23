@@ -1,3 +1,7 @@
+## 0.6.2
+- Fix: InfluxDB v1 authenticatie — `influx_username` en `influx_password` toegevoegd aan config
+- InfluxDB v1 stuurt credentials als `?u=&p=` query params als geconfigureerd
+
 ## 0.6.1
 - Fix: "Session not found" na addon herstart of inactiviteit
 - MCP server draait nu in stateless mode — geen server-side sessies, elke tool call is onafhankelijk

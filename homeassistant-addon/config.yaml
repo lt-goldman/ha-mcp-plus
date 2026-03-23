@@ -4,7 +4,7 @@ description: >
   Automatically detects installed addons (InfluxDB, Grafana, Node-RED,
   Frigate, ESPHome) and activates the corresponding tools.
   No URL configuration needed — everything is auto-discovered.
-version: "0.6.1"
+version: "0.6.2"
 slug: "ha_mcp_plus"
 init: false
 arch:
@@ -49,7 +49,9 @@ schema:
   ha_token: password?
 
   # InfluxDB — only needed if InfluxDB auth is enabled
-  influx_token: password?
+  influx_token: password?      # v2 only
+  influx_username: str?        # v1 only (leave empty if no auth)
+  influx_password: password?   # v1 only
   influx_org: str?
   influx_bucket: str?
 
@@ -72,6 +74,8 @@ options:
   mcp_secret_path: ""
   ha_token: ""
   influx_token: ""
+  influx_username: ""
+  influx_password: ""
   influx_org: "homeassistant"
   influx_bucket: "homeassistant"
   grafana_token: ""
