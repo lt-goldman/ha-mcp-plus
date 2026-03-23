@@ -5,6 +5,7 @@ Dangerous operations (restart, stop) go through SafetyGuard.
 
 import httpx
 import logging
+import os
 from typing import Optional
 from core.plugin_base import BasePlugin, PluginConfig
 from core.safety import plan_supervisor_restart_ha, plan_addon_stop
@@ -21,10 +22,10 @@ class SupervisorPlugin(BasePlugin):
 
     def register_tools(self, mcp, cfg: PluginConfig) -> None:
         supervisor_url = "http://supervisor"
-        ha_token = cfg.extra.get("ha_token", "")
 
         def _headers():
-            return {"Authorization": f"Bearer {ha_token}", "Content-Type": "application/json"}
+            token = os.environ.get("SUPERVISOR_TOKEN", "")
+            return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
         def _sup(method: str, path: str, json: dict = None) -> dict:
             full_url = f"{supervisor_url}{path}"

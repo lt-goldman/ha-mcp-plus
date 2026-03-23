@@ -261,6 +261,16 @@ changes that cannot be undone.
     except Exception as e:
         log.warning(f"Could not load homeassistant plugin: {e}")
 
+    # Supervisor tools (always active)
+    try:
+        from plugins.supervisor import SupervisorPlugin
+        sup_plugin = SupervisorPlugin()
+        sup_cfg = PluginConfig(url="", token="", extra=options)
+        sup_plugin.register_tools(mcp, sup_cfg)
+        log.info("Registering tools: Supervisor (always active)")
+    except Exception as e:
+        log.warning(f"Could not load supervisor plugin: {e}")
+
     # Python sandbox (only when explicitly enabled)
     if sandbox_enabled:
         try:
