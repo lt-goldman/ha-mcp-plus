@@ -1,10 +1,10 @@
-## 0.5.31
+## 0.6.0
 - InfluxDB: auto-detectie van v1 (InfluxQL) vs v2 (Flux) via `/health` endpoint
 - InfluxDB v1: queries via `/query` met InfluxQL syntax
 - InfluxDB v2: queries via `/api/v2/query` met Flux syntax
 - `influxdb_build_grafana_query` geeft nu beide query-varianten terug + detected_version
 
-## 0.5.30
+## 0.6.0-pre (was 0.5.30)
 - ESPHome: `esphome_read_config` — lees bestaande YAML config
 - ESPHome: `esphome_write_config` — schrijf/maak nieuwe YAML config voor een device
 - ESPHome: `esphome_compile` — compileer firmware via ESPHome API
