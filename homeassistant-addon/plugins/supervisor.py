@@ -23,11 +23,26 @@ class SupervisorPlugin(BasePlugin):
     def register_tools(self, mcp, cfg: PluginConfig) -> None:
         supervisor_url = "http://supervisor"
 
-        def _headers():
+        def _get_token() -> str:
+            # 1. Current process env
             token = os.environ.get("SUPERVISOR_TOKEN") or os.environ.get("HASSIO_TOKEN", "")
-            if not token:
-                log.warning("[Supervisor] No SUPERVISOR_TOKEN or HASSIO_TOKEN in environment")
-            return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+            if token:
+                return token
+            # 2. PID 1 env (s6 init may hold it even if not inherited)
+            try:
+                with open("/proc/1/environ", "rb") as f:
+                    for part in f.read().split(b"\x00"):
+                        if part.startswith(b"SUPERVISOR_TOKEN="):
+                            return part.split(b"=", 1)[1].decode()
+                        if part.startswith(b"HASSIO_TOKEN="):
+                            return part.split(b"=", 1)[1].decode()
+            except Exception:
+                pass
+            log.warning("[Supervisor] No SUPERVISOR_TOKEN or HASSIO_TOKEN found anywhere")
+            return ""
+
+        def _headers():
+            return {"Authorization": f"Bearer {_get_token()}", "Content-Type": "application/json"}
 
         def _sup(method: str, path: str, json: dict = None) -> dict:
             full_url = f"{supervisor_url}{path}"
@@ -74,11 +89,12 @@ class SupervisorPlugin(BasePlugin):
             """Check Supervisor API connectivity and token availability."""
             sup_token = os.environ.get("SUPERVISOR_TOKEN", "")
             hassio_token = os.environ.get("HASSIO_TOKEN", "")
-            token_in_use = sup_token or hassio_token
+            token = _get_token()
             return {
                 "SUPERVISOR_TOKEN_set": bool(sup_token),
                 "HASSIO_TOKEN_set": bool(hassio_token),
-                "token_length": len(token_in_use),
+                "token_from_proc1": bool(token) and not bool(sup_token or hassio_token),
+                "token_length": len(token),
                 "supervisor_url": supervisor_url,
                 "ping": _sup("GET", "/info"),
             }

@@ -1,3 +1,7 @@
+## 0.6.5
+- Fix: Supervisor token ook ophalen uit `/proc/1/environ` als fallback (s6 init heeft token maar geeft hem niet altijd door aan child processes)
+- `supervisor_health` toont nu ook of token via `/proc/1` gevonden werd
+
 ## 0.6.4
 - Fix: Supervisor tools proberen nu ook `HASSIO_TOKEN` als `SUPERVISOR_TOKEN` leeg is (compatibiliteit oudere HA versies)
 - Nieuw: `supervisor_health` tool — toont token-beschikbaarheid en Supervisor API bereikbaarheid voor diagnose
