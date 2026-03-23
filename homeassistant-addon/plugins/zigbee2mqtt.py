@@ -2,7 +2,7 @@
 Zigbee2MQTT plugin — list devices/groups, get device info, control devices.
 
 Auto-discovered when the Zigbee2MQTT HA addon is running.
-Uses the Z2M REST API (available since Z2M v1.35.0) on port 8080.
+Uses the Z2M REST API on port 8099 (frontend/ingress port in HA addon).
 
 Optional: set z2m_token in addon options if Z2M auth is enabled.
 """
@@ -18,7 +18,7 @@ class Zigbee2MQTTPlugin(BasePlugin):
     NAME          = "Zigbee2MQTT"
     DESCRIPTION   = "List and control Zigbee devices and groups via Z2M REST API"
     ADDON_SLUG    = "zigbee2mqtt"
-    INTERNAL_PORT = 8080
+    INTERNAL_PORT = 8099
     CONFIG_KEY    = "z2m_token"
 
     def register_tools(self, mcp, cfg: PluginConfig) -> None:

@@ -1,3 +1,6 @@
+## 0.6.8
+- Fix: Zigbee2MQTT plugin gebruikte poort 8080 maar Z2M HA addon luistert op 8099 (frontend port) — connectie werkte nooit
+
 ## 0.6.7
 - Fix: Supervisor API vereist `X-Supervisor-Token` header, niet `Authorization: Bearer` — dit was de echte oorzaak van alle auth-fouten
 - Verwijderd: HA REST proxy fallback (`/api/hassio/`) — die route is geblacklist voor addons
