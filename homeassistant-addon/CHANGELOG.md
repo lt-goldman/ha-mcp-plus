@@ -1,3 +1,11 @@
+## 0.7.6
+- Fix: `grafana_add_panel` gebruikte altijd Flux (`queryType: "flux"`) ook bij InfluxDB v1 — panelen bleven leeg
+- Fix: datasource versie wordt nu automatisch gedetecteerd via Grafana API (`jsonData.version == "Flux"` → v2, anders v1)
+- InfluxDB v1: query gebruikt nu `rawQuery: true` + InfluxQL met `$timeFilter` en `$__interval` (geen `queryType`)
+- InfluxDB v2: bestaand Flux formaat behouden
+- Nieuw parameter `influxql_query` voor expliciete InfluxQL override
+- Datasource UID wordt nu meegegeven in panel target voor betere Grafana compatibiliteit
+
 ## 0.7.5
 - Fix: `influxdb_find_entity` zocht met volledig entity_id incl. domein (`sensor.x`) maar HA slaat in InfluxDB alleen het object_id op (`x`) — domein wordt nu automatisch gestript
 - Fix: zoektijdvenster uitgebreid van 1h naar 24h

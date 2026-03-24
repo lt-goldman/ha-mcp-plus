@@ -120,6 +120,20 @@ class GrafanaPlugin(BasePlugin):
                 "title": title,
             }
 
+        def _get_influxdb_datasource() -> Optional[dict]:
+            """Return the first InfluxDB datasource from Grafana, or None."""
+            data = _get("/api/datasources")
+            if not isinstance(data, list):
+                return None
+            for ds in data:
+                if ds.get("type") == "influxdb":
+                    return ds
+            return None
+
+        def _influxdb_is_flux(ds: dict) -> bool:
+            """Return True if the datasource is configured for Flux (v2), False for InfluxQL (v1)."""
+            return ds.get("jsonData", {}).get("version") == "Flux"
+
         @mcp.tool()
         def grafana_add_panel(
             dashboard_uid: str,
@@ -131,44 +145,82 @@ class GrafanaPlugin(BasePlugin):
             window: str = "5m",
             unit: str = "short",
             flux_query: Optional[str] = None,
+            influxql_query: Optional[str] = None,
         ) -> dict:
             """
             Add a panel to a Grafana dashboard for one or more HA entities.
-            Automatically builds the InfluxDB Flux query unless flux_query is provided.
+            Auto-detects InfluxDB v1 (InfluxQL) or v2 (Flux) from the Grafana datasource config.
+            Pass flux_query or influxql_query to override auto-build.
 
             Args:
                 dashboard_uid: Dashboard UID (from grafana_create_dashboard or grafana_list_dashboards).
                 title: Panel title.
-                entity_ids: List of HA entity IDs to plot.
+                entity_ids: List of HA entity IDs to plot (without domain, e.g. 'power_infra').
                 panel_type: 'timeseries' (default), 'gauge', 'stat', 'bar'.
                 range_hours: Time range in hours (default 24).
                 aggregation: 'mean', 'last', 'max', 'min' (default 'mean').
                 window: Aggregation window (default '5m').
                 unit: Grafana unit ('celsius', 'watt', 'percent', 'short').
-                flux_query: Optional pre-built Flux query (overrides auto-build).
+                flux_query: Optional pre-built Flux query for InfluxDB v2 (overrides auto-build).
+                influxql_query: Optional pre-built InfluxQL query for InfluxDB v1 (overrides auto-build).
             """
             # Get current dashboard
             dash_resp = _get(f"/api/dashboards/uid/{dashboard_uid}")
+            if "error" in dash_resp:
+                return dash_resp
             dash = dash_resp.get("dashboard", {})
             panels = dash.get("panels", [])
             next_id = max((p.get("id", 0) for p in panels), default=0) + 1
 
-            # Build Flux query if not provided
-            if not flux_query:
-                filter_clause = " or ".join([f'r["entity_id"] == "{e}"' for e in entity_ids])
-                flux_query = f"""from(bucket: "{bucket}")
-  |> range(start: -{range_hours}h)
-  |> filter(fn: (r) => {filter_clause})
-  |> filter(fn: (r) => r["_field"] == "value")
-  |> aggregateWindow(every: {window}, fn: {aggregation}, createEmpty: false)"""
+            # Detect datasource version
+            ds = _get_influxdb_datasource()
+            ds_ref = {"type": "influxdb", "uid": ds["uid"]} if ds else {"type": "influxdb"}
+            use_flux = _influxdb_is_flux(ds) if ds else False
+
+            # Build query and target
+            if influxql_query or (not flux_query and not use_flux):
+                # InfluxQL (v1) path
+                if not influxql_query:
+                    # Strip domain prefix from entity_ids (HA stores object_id in InfluxDB)
+                    object_ids = [e.split(".", 1)[-1] if "." in e else e for e in entity_ids]
+                    where_clause = " OR ".join([f'"entity_id" = \'{eid}\'' for eid in object_ids])
+                    influxql_query = (
+                        f'SELECT {aggregation}("value") FROM /.*/ '
+                        f'WHERE ({where_clause}) AND $timeFilter '
+                        f'GROUP BY time($__interval), "entity_id" fill(null)'
+                    )
+                target = {
+                    "refId": "A",
+                    "rawQuery": True,
+                    "query": influxql_query,
+                    "resultFormat": "time_series",
+                    "datasource": ds_ref,
+                }
+            else:
+                # Flux (v2) path
+                if not flux_query:
+                    filter_clause = " or ".join([f'r["entity_id"] == "{e}"' for e in entity_ids])
+                    flux_query = (
+                        f'from(bucket: "{bucket}")\n'
+                        f'  |> range(start: -{range_hours}h)\n'
+                        f'  |> filter(fn: (r) => {filter_clause})\n'
+                        f'  |> filter(fn: (r) => r["_field"] == "value")\n'
+                        f'  |> aggregateWindow(every: {window}, fn: {aggregation}, createEmpty: false)'
+                    )
+                target = {
+                    "refId": "A",
+                    "query": flux_query,
+                    "queryType": "flux",
+                    "datasource": ds_ref,
+                }
 
             panel = {
                 "id": next_id,
                 "title": title,
                 "type": panel_type,
                 "gridPos": {"h": 8, "w": 12, "x": (next_id - 1) % 2 * 12, "y": (next_id - 1) // 2 * 8},
-                "datasource": {"type": "influxdb"},
-                "targets": [{"refId": "A", "query": flux_query, "queryType": "flux"}],
+                "datasource": ds_ref,
+                "targets": [target],
                 "fieldConfig": {
                     "defaults": {
                         "unit": unit,
@@ -186,5 +238,6 @@ class GrafanaPlugin(BasePlugin):
                 "success": result.get("status") == "success",
                 "panel_id": next_id,
                 "title": title,
+                "query_type": "flux" if (flux_query or use_flux) and not influxql_query else "influxql",
                 "embed_url": f"{url}/d-solo/{dashboard_uid}?panelId={next_id}&from=now-{range_hours}h&to=now&kiosk",
             }
