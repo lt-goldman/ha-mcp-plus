@@ -50,8 +50,8 @@ class ESPHomePlugin(BasePlugin):
                 devices = []
                 for path in sorted(yaml_files):
                     name = os.path.basename(path).removesuffix(".yaml")
-                    # Skip ESPHome's own internal files
-                    if name.startswith("."):
+                    # Skip ESPHome's own internal files and secrets file
+                    if name.startswith(".") or name == "secrets":
                         continue
                     devices.append({"name": name, "config_path": path})
                 return {"count": len(devices), "devices": devices}

@@ -1,3 +1,6 @@
+## 0.7.12
+- Fix: `esphome_list_devices` sloot `secrets.yaml` niet uit — nu gefilterd
+
 ## 0.7.11
 - Fix: `esphome_list_devices` leest nu configs uit `/config/esphome/*.yaml` i.p.v. HTTP API — ESPHome redirect `/devices` altijd naar `/login` (checkt poort, niet header)
 
