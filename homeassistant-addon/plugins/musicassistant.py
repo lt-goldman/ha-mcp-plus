@@ -28,16 +28,26 @@ class MusicAssistantPlugin(BasePlugin):
 
         def _call(command: str, args: dict = None) -> Any:
             """Send a single command over WebSocket and return the result."""
-            message_id = str(uuid.uuid4())
-            msg = {"message_id": message_id, "command": command, "args": args or {}}
-            headers = [f"Authorization: Bearer {token}"] if token else []
-
             ws = websocket.WebSocket()
             try:
-                ws.connect(ws_url, header=headers, timeout=10)
+                ws.connect(ws_url, timeout=10)
                 # MA sends a server_info message on connect — consume it
                 ws.recv()
-                ws.send(json.dumps(msg))
+
+                # Authenticate if token provided (required for schema >= 28)
+                if token:
+                    auth_id = str(uuid.uuid4()).replace("-", "")
+                    ws.send(json.dumps({"message_id": auth_id, "command": "auth", "args": {"token": token}}))
+                    while True:
+                        raw = ws.recv()
+                        resp = json.loads(raw)
+                        if resp.get("message_id") == auth_id:
+                            if "error_code" in resp:
+                                return {"error": f"Auth failed: {resp.get('details', resp.get('error_code'))}"}
+                            break  # auth success
+
+                message_id = str(uuid.uuid4()).replace("-", "")
+                ws.send(json.dumps({"message_id": message_id, "command": command, "args": args or {}}))
                 while True:
                     raw = ws.recv()
                     resp = json.loads(raw)
@@ -52,10 +62,8 @@ class MusicAssistantPlugin(BasePlugin):
         def ma_health() -> dict:
             """Check Music Assistant connectivity and version."""
             try:
-                message_id = str(uuid.uuid4())
-                headers = [f"Authorization: Bearer {token}"] if token else []
                 ws = websocket.WebSocket()
-                ws.connect(ws_url, header=headers, timeout=5)
+                ws.connect(ws_url, timeout=5)
                 raw = ws.recv()  # server_info
                 ws.close()
                 info = json.loads(raw)

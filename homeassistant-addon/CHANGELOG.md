@@ -1,3 +1,6 @@
+## 0.7.13
+- Fix: Music Assistant auth — plugin stuurde token als HTTP header, MA vereist een expliciete `auth` command over WebSocket na verbinding (schema >= 28)
+
 ## 0.7.12
 - Fix: `esphome_list_devices` sloot `secrets.yaml` niet uit — nu gefilterd
 
