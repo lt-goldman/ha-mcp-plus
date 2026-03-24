@@ -1,3 +1,9 @@
+## 0.7.9
+- Refactor: `grafana_add_panel` vereenvoudigd — geen auto-build meer, query verplicht meegeven
+- Gebruik `influxdb_find_entity` om de juiste query te krijgen, geef die door als `query` parameter
+- Parameters verwijderd: `entity_ids`, `aggregation`, `window`, `range_hours`, `flux_query`, `influxql_query`
+- Parameters toegevoegd: `query` (verplicht), `query_type` ('influxql' of 'flux')
+
 ## 0.7.8
 - Fix: `grafana_add_panel` InfluxQL auto-build gebruikt nu `FROM /.*/` — HA v1 slaat data op in measurement genaamd naar de eenheid (`"W"`, `"kWh"`, `"°C"` etc.), niet in `"state"`
 
