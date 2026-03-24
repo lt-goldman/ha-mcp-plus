@@ -185,7 +185,7 @@ class GrafanaPlugin(BasePlugin):
                     object_ids = [e.split(".", 1)[-1] if "." in e else e for e in entity_ids]
                     where_clause = " OR ".join([f'"entity_id" = \'{eid}\'' for eid in object_ids])
                     influxql_query = (
-                        f'SELECT {aggregation}("value") FROM /.*/ '
+                        f'SELECT {aggregation}("value") FROM "state" '
                         f'WHERE ({where_clause}) AND $timeFilter '
                         f'GROUP BY time($__interval), "entity_id" fill(null)'
                     )

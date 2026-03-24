@@ -1,3 +1,6 @@
+## 0.7.7
+- Fix: `grafana_add_panel` auto-build InfluxQL query gebruikte `FROM /.*/` (regex alle measurements) — HA slaat data op in measurement `"state"`, panelen bleven leeg
+
 ## 0.7.6
 - Fix: `grafana_add_panel` gebruikte altijd Flux (`queryType: "flux"`) ook bij InfluxDB v1 — panelen bleven leeg
 - Fix: datasource versie wordt nu automatisch gedetecteerd via Grafana API (`jsonData.version == "Flux"` → v2, anders v1)
