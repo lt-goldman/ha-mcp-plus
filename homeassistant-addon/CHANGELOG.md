@@ -1,3 +1,6 @@
+## 0.7.10
+- Fix: ESPHome plugin stuurde `Authorization: Bearer SUPERVISOR_TOKEN` maar ESPHome gebruikt eigen auth — vervangen door `X-HA-Ingress: true` header voor auth bypass
+
 ## 0.7.9
 - Refactor: `grafana_add_panel` vereenvoudigd — geen auto-build meer, query verplicht meegeven
 - Gebruik `influxdb_find_entity` om de juiste query te krijgen, geef die door als `query` parameter

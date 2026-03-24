@@ -23,8 +23,8 @@ class ESPHomePlugin(BasePlugin):
         url = cfg.url
 
         def _headers() -> dict:
-            token = os.environ.get("SUPERVISOR_TOKEN", "")
-            return {"Authorization": f"Bearer {token}"} if token else {}
+            # ESPHome bypasses its own auth for ingress requests via X-HA-Ingress header
+            return {"X-HA-Ingress": "true"}
 
         @mcp.tool()
         def esphome_health() -> dict:
