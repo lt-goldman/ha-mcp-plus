@@ -1,3 +1,12 @@
+## 0.7.0
+- Herschreven: Zigbee2MQTT plugin gebruikt nu MQTT via HA (`mqtt.publish` service) i.p.v. HTTP REST
+- Z2M heeft geen REST API — alle commando's gaan via MQTT topics (`zigbee2mqtt/...`)
+- Lezen gaat via HA entity states (bridge state, version, device states)
+- Nieuw: `z2m_permit_join` — pairing aan/uitzetten met optionele router en tijdsduur
+- Nieuw: `z2m_rename_device` — apparaat hernoemen via bridge request
+- `z2m_device_set` en `z2m_group_set` gebruiken nu MQTT publish
+- `z2m_health` en `z2m_bridge_info` lezen via `sensor.zigbee2mqtt_bridge_state` HA entity
+
 ## 0.6.8
 - Fix: Zigbee2MQTT plugin gebruikte poort 8080 maar Z2M HA addon luistert op 8099 (frontend port) — connectie werkte nooit
 

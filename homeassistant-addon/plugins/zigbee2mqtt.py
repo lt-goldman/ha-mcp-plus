@@ -1,14 +1,15 @@
 """
-Zigbee2MQTT plugin — list devices/groups, get device info, control devices.
+Zigbee2MQTT plugin — bridge control and device management.
 
-Auto-discovered when the Zigbee2MQTT HA addon is running.
-Uses the Z2M REST API on port 8099 (frontend/ingress port in HA addon).
-
-Optional: set z2m_token in addon options if Z2M auth is enabled.
+Z2M has no REST API. All operations use:
+- MQTT (via HA mqtt.publish service) for commands/control
+- HA entity states for reading bridge/device status
 """
 
 import httpx
+import json
 import logging
+import os
 from core.plugin_base import BasePlugin, PluginConfig
 
 log = logging.getLogger("ha-mcp-plus.zigbee2mqtt")
@@ -16,211 +17,204 @@ log = logging.getLogger("ha-mcp-plus.zigbee2mqtt")
 
 class Zigbee2MQTTPlugin(BasePlugin):
     NAME          = "Zigbee2MQTT"
-    DESCRIPTION   = "List and control Zigbee devices and groups via Z2M REST API"
+    DESCRIPTION   = "Control Zigbee devices and bridge via MQTT (through HA)"
     ADDON_SLUG    = "zigbee2mqtt"
-    INTERNAL_PORT = 8099
+    INTERNAL_PORT = 8099   # used only for addon discovery check, not for HTTP calls
     CONFIG_KEY    = "z2m_token"
 
     def register_tools(self, mcp, cfg: PluginConfig) -> None:
-        url   = cfg.url.rstrip("/")
-        token = cfg.token  # optional — only needed if Z2M auth is enabled
+        ha_api    = "http://supervisor/core/api"
+        base_topic = "zigbee2mqtt"
 
-        def _headers() -> dict:
-            h = {"Content-Type": "application/json"}
-            if token:
-                h["Authorization"] = f"Bearer {token}"
-            return h
-
-        def _get(path: str) -> dict | list:
+        def _ha_token() -> str:
+            for t in [os.environ.get("SUPERVISOR_TOKEN"), os.environ.get("HASSIO_TOKEN")]:
+                if t:
+                    return t
             try:
-                r = httpx.get(f"{url}/api{path}", headers=_headers(), timeout=10)
-                if not r.is_success:
-                    return {"error": f"HTTP {r.status_code}", "detail": r.text[:300]}
-                return r.json()
-            except httpx.ConnectError:
-                return {"error": f"Cannot connect to Zigbee2MQTT at {url}"}
+                with open("/proc/1/environ", "rb") as f:
+                    for part in f.read().split(b"\x00"):
+                        if part.startswith(b"SUPERVISOR_TOKEN="):
+                            t = part.split(b"=", 1)[1].decode().strip()
+                            if t:
+                                return t
+            except Exception:
+                pass
+            return cfg.extra.get("ha_token", "") or os.environ.get("HA_REST_TOKEN", "")
+
+        def _ha_headers() -> dict:
+            return {"Authorization": f"Bearer {_ha_token()}", "Content-Type": "application/json"}
+
+        def _get_state(entity_id: str) -> dict:
+            try:
+                r = httpx.get(f"{ha_api}/states/{entity_id}", headers=_ha_headers(), timeout=10)
+                if r.status_code == 200:
+                    return r.json()
+                return {"error": f"HTTP {r.status_code}"}
             except Exception as e:
                 return {"error": str(e)}
 
-        def _post(path: str, data: dict = None) -> dict:
+        def _mqtt_publish(topic: str, payload) -> dict:
             try:
-                r = httpx.post(f"{url}/api{path}", headers=_headers(), json=data or {}, timeout=10)
-                if not r.is_success:
-                    return {"error": f"HTTP {r.status_code}", "detail": r.text[:300]}
-                return r.json() if r.text.strip() else {"ok": True}
+                r = httpx.post(
+                    f"{ha_api}/services/mqtt/publish",
+                    headers=_ha_headers(),
+                    json={
+                        "topic": topic,
+                        "payload": json.dumps(payload) if isinstance(payload, dict) else str(payload),
+                    },
+                    timeout=10,
+                )
+                if r.is_success:
+                    return {"ok": True, "topic": topic}
+                return {"error": f"HTTP {r.status_code}", "detail": r.text[:200]}
             except Exception as e:
                 return {"error": str(e)}
 
-        # ── BRIDGE ────────────────────────────────────────────────────────────
+        def _bridge_request(action: str, payload: dict = None) -> dict:
+            return _mqtt_publish(f"{base_topic}/bridge/request/{action}", payload or {})
+
+        # ── BRIDGE ─────────────────────────────────────────────────────────────
 
         @mcp.tool()
         def z2m_health() -> dict:
-            """Check Zigbee2MQTT connectivity and version."""
-            result = _get("/health")
-            if isinstance(result, dict) and "error" not in result:
-                return result
-            # Fallback: try bridge info
-            info = _get("/bridge/info")
-            if isinstance(info, dict) and "error" not in info:
+            """Check Zigbee2MQTT bridge status via HA entity state."""
+            state = _get_state("sensor.zigbee2mqtt_bridge_state")
+            if "error" not in state:
                 return {
-                    "connected": True,
-                    "version": info.get("version"),
-                    "coordinator": info.get("coordinator", {}).get("type"),
+                    "connected": state.get("state") == "online",
+                    "state": state.get("state"),
+                    "attributes": state.get("attributes", {}),
                 }
-            return result
+            return state
 
         @mcp.tool()
         def z2m_bridge_info() -> dict:
             """
-            Get Zigbee2MQTT bridge info: coordinator type, firmware, channel,
-            network settings, and Z2M version.
+            Get Z2M bridge info (version, coordinator, channel) from HA entities.
+            Device states and info are available via HA entities created by Z2M.
             """
-            return _get("/bridge/info")
+            result = {}
+            for entity in ["sensor.zigbee2mqtt_bridge_state", "sensor.zigbee2mqtt_bridge_version"]:
+                s = _get_state(entity)
+                if "error" not in s:
+                    key = entity.split(".")[-1].replace("zigbee2mqtt_bridge_", "")
+                    result[key] = {"state": s.get("state"), **s.get("attributes", {})}
+            if not result:
+                return {
+                    "error": "No Z2M bridge entities found in HA.",
+                    "hint": "Check entity names in Developer Tools → States (search 'zigbee2mqtt').",
+                }
+            return result
 
         @mcp.tool()
         def z2m_bridge_config() -> dict:
-            """Get the full Zigbee2MQTT configuration."""
-            return _get("/bridge/config")
-
-        # ── DEVICES ───────────────────────────────────────────────────────────
+            """
+            Request Z2M to publish its config to MQTT.
+            Bridge configuration attributes are also visible on HA entities.
+            """
+            return _bridge_request("config/get")
 
         @mcp.tool()
-        def z2m_list_devices(type_filter: str = "") -> dict:
+        def z2m_permit_join(permit: bool = True, device: str = "", duration: int = 254) -> dict:
             """
-            List all Zigbee devices known to Z2M.
+            Enable or disable Zigbee pairing mode.
 
             Args:
-                type_filter: Filter by device type: 'EndDevice', 'Router', or 'Coordinator'.
-                             Empty = all.
+                permit:   True = allow new devices to join, False = block joining.
+                device:   Optional: only allow joining via a specific router device.
+                duration: Seconds to allow joining (default 254).
             """
-            devices = _get("/devices")
-            if isinstance(devices, dict) and "error" in devices:
-                return devices
-            if not isinstance(devices, list):
-                return {"error": f"Unexpected response format: {type(devices).__name__}"}
-            if type_filter:
-                devices = [d for d in devices if d.get("type") == type_filter]
+            payload: dict = {"value": permit, "time": duration}
+            if device:
+                payload["device"] = device
+            result = _bridge_request("permit_join", payload)
+            if result.get("ok"):
+                status = "ingeschakeld" if permit else "uitgeschakeld"
+                return {"ok": True, "message": f"Pairing {status} voor {duration} seconden."}
+            return result
+
+        @mcp.tool()
+        def z2m_rename_device(friendly_name: str, new_name: str) -> dict:
+            """
+            Rename a Zigbee device in Z2M.
+
+            Args:
+                friendly_name: Current device name (as shown in Z2M).
+                new_name:      New device name.
+            """
+            return _bridge_request("device/rename", {"from": friendly_name, "to": new_name})
+
+        # ── DEVICES ────────────────────────────────────────────────────────────
+
+        @mcp.tool()
+        def z2m_device_set(friendly_name: str, payload: dict) -> dict:
+            """
+            Send a command to a Zigbee device via MQTT.
+
+            Args:
+                friendly_name: Device name as configured in Z2M.
+                payload:       Command, e.g. {'state': 'ON'} or {'brightness': 128, 'color_temp': 300}.
+            """
+            return _mqtt_publish(f"{base_topic}/{friendly_name}/set", payload)
+
+        @mcp.tool()
+        def z2m_device_get(friendly_name: str) -> dict:
+            """
+            Request current state from a Zigbee device via MQTT.
+
+            Args:
+                friendly_name: Device name as configured in Z2M.
+            """
+            return _mqtt_publish(f"{base_topic}/{friendly_name}/get", {"state": ""})
+
+        @mcp.tool()
+        def z2m_list_devices() -> dict:
+            """
+            Request Z2M to republish all device info to MQTT.
+            Use ha_search_entities or ha_list_devices to see devices as HA knows them.
+            """
+            result = _bridge_request("devices/get")
             return {
-                "count": len(devices),
-                "devices": [
-                    {
-                        "friendly_name": d.get("friendly_name"),
-                        "ieee_address": d.get("ieee_address"),
-                        "type": d.get("type"),
-                        "vendor": d.get("definition", {}).get("vendor") if d.get("definition") else None,
-                        "model": d.get("definition", {}).get("model") if d.get("definition") else None,
-                        "description": d.get("definition", {}).get("description") if d.get("definition") else None,
-                        "supported": d.get("supported", False),
-                        "interview_completed": d.get("interview_completed", False),
-                        "disabled": d.get("disabled", False),
-                    }
-                    for d in devices
-                    if d.get("type") != "Coordinator"  # exclude coordinator from device list
-                ],
+                "ok": result.get("ok", False),
+                "hint": "Use ha_search_entities('zigbee2mqtt') or ha_list_devices() to list devices in HA.",
+                "mqtt_result": result,
             }
 
         @mcp.tool()
         def z2m_get_device(friendly_name: str) -> dict:
             """
-            Get detailed info for a specific Zigbee device.
+            Request Z2M to republish state for a specific device.
+            Current state is available via HA entities (ha_get_state).
 
             Args:
-                friendly_name: Device friendly name (e.g. 'lamp_woonkamer') or IEEE address.
+                friendly_name: Device name as configured in Z2M.
             """
-            result = _get(f"/devices/{friendly_name}")
-            if isinstance(result, dict) and "error" not in result:
-                # Include exposed features if available
-                definition = result.get("definition") or {}
-                return {
-                    "friendly_name": result.get("friendly_name"),
-                    "ieee_address": result.get("ieee_address"),
-                    "type": result.get("type"),
-                    "vendor": definition.get("vendor"),
-                    "model": definition.get("model"),
-                    "description": definition.get("description"),
-                    "supported": result.get("supported"),
-                    "interview_completed": result.get("interview_completed"),
-                    "power_source": result.get("power_source"),
-                    "disabled": result.get("disabled", False),
-                    "exposes": [
-                        f.get("name") or f.get("type")
-                        for f in definition.get("exposes", [])
-                        if isinstance(f, dict)
-                    ],
-                    "options": definition.get("options", []),
-                }
-            return result
-
-        @mcp.tool()
-        def z2m_device_set(friendly_name: str, payload: dict) -> dict:
-            """
-            Send a command to a Zigbee device (equivalent to MQTT publish to zigbee2mqtt/{name}/set).
-
-            Args:
-                friendly_name: Device friendly name.
-                payload:       Command payload, e.g. {'state': 'ON'} or
-                               {'brightness': 128, 'color_temp': 300}.
-            """
-            return _post(f"/devices/{friendly_name}/set", payload)
-
-        @mcp.tool()
-        def z2m_device_get(friendly_name: str, payload: dict = None) -> dict:
-            """
-            Request current state from a Zigbee device.
-
-            Args:
-                friendly_name: Device friendly name.
-                payload:       Optional: which properties to request,
-                               e.g. {'state': ''} to request the state.
-                               Empty = request all.
-            """
-            return _post(f"/devices/{friendly_name}/get", payload or {})
-
-        @mcp.tool()
-        def z2m_rename_device(friendly_name: str, new_name: str) -> dict:
-            """
-            Rename a Zigbee device.
-
-            Args:
-                friendly_name: Current friendly name.
-                new_name:      New friendly name.
-            """
-            return _post(f"/devices/{friendly_name}/settings", {"friendly_name": new_name})
-
-        # ── GROUPS ────────────────────────────────────────────────────────────
-
-        @mcp.tool()
-        def z2m_list_groups() -> dict:
-            """List all Zigbee groups with their members."""
-            groups = _get("/groups")
-            if isinstance(groups, dict) and "error" in groups:
-                return groups
-            if not isinstance(groups, list):
-                return {"error": f"Unexpected response format: {type(groups).__name__}"}
+            result = _mqtt_publish(f"{base_topic}/{friendly_name}/get", {"state": ""})
             return {
-                "count": len(groups),
-                "groups": [
-                    {
-                        "id": g.get("id"),
-                        "friendly_name": g.get("friendly_name"),
-                        "members": [
-                            m.get("friendly_name") or m.get("ieee_address")
-                            for m in g.get("members", [])
-                        ],
-                    }
-                    for g in groups
-                ],
+                "ok": result.get("ok", False),
+                "hint": f"Use ha_get_state to read current state of HA entities for '{friendly_name}'.",
+                "mqtt_result": result,
             }
+
+        # ── GROUPS ─────────────────────────────────────────────────────────────
 
         @mcp.tool()
         def z2m_group_set(friendly_name: str, payload: dict) -> dict:
             """
-            Send a command to a Zigbee group.
+            Send a command to a Zigbee group via MQTT.
 
             Args:
-                friendly_name: Group friendly name.
-                payload:       Command payload, e.g. {'state': 'OFF'}.
+                friendly_name: Group name as configured in Z2M.
+                payload:       Command, e.g. {'state': 'OFF'}.
             """
-            return _post(f"/groups/{friendly_name}/set", payload)
+            return _mqtt_publish(f"{base_topic}/{friendly_name}/set", payload)
 
-        log.info("[Zigbee2MQTT] Tools registered")
+        @mcp.tool()
+        def z2m_list_groups() -> dict:
+            """
+            Request Z2M to republish group info to MQTT.
+            Groups are also visible as HA entities.
+            """
+            return _bridge_request("groups/get")
+
+        log.info("[Zigbee2MQTT] Tools registered (MQTT-based via HA)")
