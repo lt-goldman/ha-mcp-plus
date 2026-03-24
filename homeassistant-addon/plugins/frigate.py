@@ -18,6 +18,12 @@ class FrigatePlugin(BasePlugin):
     INTERNAL_PORT = 5000
     CONFIG_KEY    = "frigate_token"
 
+    @classmethod
+    def get_url_override(cls, addon_info: dict):
+        """Read the real Frigate backend URL from the proxy addon's options.server config."""
+        server = addon_info.get("options", {}).get("server", "").rstrip("/")
+        return server or None
+
     def register_tools(self, mcp, cfg: PluginConfig) -> None:
         url = cfg.url
         token = cfg.token

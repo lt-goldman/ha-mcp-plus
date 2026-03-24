@@ -1,3 +1,7 @@
+## 0.7.15
+- Fix: Frigate plugin verbindt nu direct met de echte Frigate backend (`options.server` uit de proxy-addon config) i.p.v. via de nginx proxy die auth blokkeert
+- Nieuw: `BasePlugin.get_url_override()` hook voor proxy-addons die de backend URL in hun config hebben
+
 ## 0.7.14
 - Fix: Frigate plugin ondersteunt nu `frigate_token` voor authenticatie (vereist bij Frigate 0.14+)
 - Nieuw config veld `frigate_token` toegevoegd aan addon schema

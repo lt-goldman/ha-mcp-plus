@@ -221,6 +221,13 @@ def discover_and_load_plugins(addon_options: dict) -> Dict[str, tuple]:
             log.info(f"  → {cls.NAME}: addon not found or not running, skipping")
             continue
 
+        # Allow plugin to override the URL based on addon config (e.g. proxy addons)
+        addon_info = get_addon_info(actual_slug) or {}
+        url_override = cls.get_url_override(addon_info)
+        if url_override:
+            log.info(f"  → {cls.NAME}: URL override from addon config: {url_override}")
+            url = url_override
+
         token = addon_options.get(cls.CONFIG_KEY, "") if cls.CONFIG_KEY else ""
 
         cfg = PluginConfig(

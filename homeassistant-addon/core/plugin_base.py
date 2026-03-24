@@ -48,6 +48,15 @@ class BasePlugin(ABC):
     def build_url(cls, hostname: str, port: int) -> str:
         return f"http://{hostname}:{port}"
 
+    @classmethod
+    def get_url_override(cls, addon_info: dict) -> Optional[str]:
+        """
+        Optional: return a direct URL based on addon_info, overriding the auto-discovered URL.
+        Useful for proxy addons where the real backend URL is stored in addon options.
+        Return None to use the auto-discovered URL.
+        """
+        return None
+
     @abstractmethod
     def register_tools(self, mcp, cfg: PluginConfig) -> None:
         """Register all MCP tools for this plugin."""
