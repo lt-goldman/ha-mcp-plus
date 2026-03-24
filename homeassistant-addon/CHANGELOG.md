@@ -1,3 +1,7 @@
+## 0.7.5
+- Fix: `influxdb_find_entity` zocht met volledig entity_id incl. domein (`sensor.x`) maar HA slaat in InfluxDB alleen het object_id op (`x`) — domein wordt nu automatisch gestript
+- Fix: zoektijdvenster uitgebreid van 1h naar 24h
+
 ## 0.7.4
 - Herschreven: Z2M plugin gefocust op afgesproken scope
 - Verwijderd: `z2m_device_set`, `z2m_device_get`, `z2m_get_device`, `z2m_list_devices`, `z2m_group_set`, `z2m_list_groups`, `z2m_bridge_config` (gebruik HA tools voor device control)

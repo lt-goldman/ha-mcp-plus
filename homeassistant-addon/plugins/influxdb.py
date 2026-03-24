@@ -145,10 +145,13 @@ class InfluxDBPlugin(BasePlugin):
             Args:
                 entity_id: HA entity ID (e.g. 'sensor.temperatuur').
             """
+            # HA stores entity_id without domain prefix in InfluxDB (e.g. "power_infra" not "sensor.power_infra")
+            object_id = entity_id.split(".", 1)[-1] if "." in entity_id else entity_id
+
             if _detect_version() == "v1":
                 # In HA+InfluxDB v1, entity_id is a tag; measurement is the unit
                 result = _query_v1(
-                    f'SELECT * FROM /.*/ WHERE "entity_id" = \'{entity_id}\' LIMIT 1',
+                    f'SELECT * FROM /.*/ WHERE "entity_id" = \'{object_id}\' AND time > now() - 24h LIMIT 1',
                     database=bucket,
                 )
                 if result.get("rows"):
@@ -156,22 +159,23 @@ class InfluxDBPlugin(BasePlugin):
                     measurement = result.get("series", ["unknown"])[0]
                     query_ready = (
                         f'SELECT mean("value") FROM "{measurement}" '
-                        f'WHERE "entity_id" = \'{entity_id}\' '
+                        f'WHERE "entity_id" = \'{object_id}\' '
                         f'AND $timeFilter GROUP BY time(5m) fill(null)'
                     )
                     return {
                         "found": True,
                         "entity_id": entity_id,
+                        "object_id": object_id,
                         "measurement": measurement,
                         "last_value": row.get("value"),
                         "influxql_query": query_ready,
                         "version": "v1",
                     }
-                return {"found": False, "entity_id": entity_id, "hint": "No data in last hour", "version": "v1"}
+                return {"found": False, "entity_id": entity_id, "object_id": object_id, "hint": "No data in last 24h — entity may not be recorded in InfluxDB", "version": "v1"}
             else:
                 flux = f"""from(bucket: "{bucket}")
-  |> range(start: -1h)
-  |> filter(fn: (r) => r["entity_id"] == "{entity_id}")
+  |> range(start: -24h)
+  |> filter(fn: (r) => r["entity_id"] == "{object_id}")
   |> first()
   |> limit(n: 1)"""
                 result = _query_v2(flux)
@@ -179,19 +183,20 @@ class InfluxDBPlugin(BasePlugin):
                     row = result["rows"][0]
                     flux_ready = f"""from(bucket: "{bucket}")
   |> range(start: -24h)
-  |> filter(fn: (r) => r["entity_id"] == "{entity_id}")
+  |> filter(fn: (r) => r["entity_id"] == "{object_id}")
   |> filter(fn: (r) => r["_field"] == "{row.get('_field', 'value')}")
   |> aggregateWindow(every: 5m, fn: mean, createEmpty: false)"""
                     return {
                         "found": True,
                         "entity_id": entity_id,
+                        "object_id": object_id,
                         "measurement": row.get("_measurement"),
                         "field": row.get("_field"),
                         "last_value": row.get("_value"),
                         "flux_query": flux_ready,
                         "version": "v2",
                     }
-                return {"found": False, "entity_id": entity_id, "hint": "No data in last hour", "version": "v2"}
+                return {"found": False, "entity_id": entity_id, "object_id": object_id, "hint": "No data in last 24h — entity may not be recorded in InfluxDB", "version": "v2"}
 
         @mcp.tool()
         def influxdb_query(query: str) -> dict:
