@@ -1,3 +1,7 @@
+## 0.7.14
+- Fix: Frigate plugin ondersteunt nu `frigate_token` voor authenticatie (vereist bij Frigate 0.14+)
+- Nieuw config veld `frigate_token` toegevoegd aan addon schema
+
 ## 0.7.13
 - Fix: Music Assistant auth — plugin stuurde token als HTTP header, MA vereist een expliciete `auth` command over WebSocket na verbinding (schema >= 28)
 

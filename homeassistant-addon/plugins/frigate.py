@@ -16,15 +16,21 @@ class FrigatePlugin(BasePlugin):
     DESCRIPTION   = "Access Frigate camera events, recordings, stats and object detection"
     ADDON_SLUG    = "frigate"
     INTERNAL_PORT = 5000
-    CONFIG_KEY    = ""  # No token needed
+    CONFIG_KEY    = "frigate_token"
 
     def register_tools(self, mcp, cfg: PluginConfig) -> None:
         url = cfg.url
+        token = cfg.token
+
+        def _headers() -> dict:
+            if token:
+                return {"Authorization": f"Bearer {token}"}
+            return {}
 
         def _get(path: str, params: dict = None) -> dict:
             full_url = f"{url}{path}"
             try:
-                r = httpx.get(full_url, params=params or {}, timeout=10)
+                r = httpx.get(full_url, params=params or {}, headers=_headers(), timeout=10)
                 if not r.is_success:
                     log.error(f"[Frigate] HTTP {r.status_code} for GET {path}: {r.text[:200]}")
                     return {"error": f"HTTP {r.status_code}"}
@@ -43,7 +49,7 @@ class FrigatePlugin(BasePlugin):
         def frigate_health() -> dict:
             """Check Frigate connectivity and version."""
             try:
-                r = httpx.get(f"{url}/api/version", timeout=5)
+                r = httpx.get(f"{url}/api/version", headers=_headers(), timeout=5)
                 if not r.is_success:
                     log.error(f"[Frigate] Health check failed: HTTP {r.status_code}")
                     return {"connected": False, "error": f"HTTP {r.status_code}"}
