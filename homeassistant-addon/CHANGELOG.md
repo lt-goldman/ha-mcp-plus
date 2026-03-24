@@ -1,5 +1,8 @@
+## 0.7.8
+- Fix: `grafana_add_panel` InfluxQL auto-build gebruikt nu `FROM /.*/` — HA v1 slaat data op in measurement genaamd naar de eenheid (`"W"`, `"kWh"`, `"°C"` etc.), niet in `"state"`
+
 ## 0.7.7
-- Fix: `grafana_add_panel` auto-build InfluxQL query gebruikte `FROM /.*/` (regex alle measurements) — HA slaat data op in measurement `"state"`, panelen bleven leeg
+- Fix: `grafana_add_panel` auto-build InfluxQL query gebruikte `FROM /.*/` maar zette het terug naar `FROM "state"` — verkeerde aanname (state measurement bevat alleen on/off switches)
 
 ## 0.7.6
 - Fix: `grafana_add_panel` gebruikte altijd Flux (`queryType: "flux"`) ook bij InfluxDB v1 — panelen bleven leeg
