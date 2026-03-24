@@ -2,6 +2,7 @@
 ESPHome plugin — auto-activated when esphome is running.
 """
 
+import glob
 import httpx
 import logging
 import os
@@ -43,31 +44,17 @@ class ESPHomePlugin(BasePlugin):
 
         @mcp.tool()
         def esphome_list_devices() -> dict:
-            """List all ESPHome devices with their online/offline status."""
+            """List all ESPHome devices by reading config files from /config/esphome/."""
             try:
-                r = httpx.get(f"{url}/devices", timeout=10, follow_redirects=True, headers=_headers())
-                if not r.is_success:
-                    return {"error": f"HTTP {r.status_code}"}
-                data = r.json()
-                devices = data.get("configured", data) if isinstance(data, dict) else data
-                return {
-                    "count": len(devices),
-                    "devices": [
-                        {
-                            "name": d.get("name"),
-                            "friendly_name": d.get("friendly_name"),
-                            "configuration": d.get("configuration"),
-                            "loaded_integrations": d.get("loaded_integrations", []),
-                            "deployed_version": d.get("deployed_version"),
-                            "current_version": d.get("current_version"),
-                            "update_available": d.get("deployed_version") != d.get("current_version"),
-                            "online": d.get("online", False),
-                        }
-                        for d in devices
-                    ],
-                }
-            except httpx.ConnectError:
-                return {"error": f"Cannot connect to ESPHome at {url}"}
+                yaml_files = glob.glob(f"{ESPHOME_CONFIG_DIR}/*.yaml")
+                devices = []
+                for path in sorted(yaml_files):
+                    name = os.path.basename(path).removesuffix(".yaml")
+                    # Skip ESPHome's own internal files
+                    if name.startswith("."):
+                        continue
+                    devices.append({"name": name, "config_path": path})
+                return {"count": len(devices), "devices": devices}
             except Exception as e:
                 return {"error": str(e)}
 

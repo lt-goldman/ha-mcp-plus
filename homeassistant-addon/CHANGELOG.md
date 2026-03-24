@@ -1,5 +1,8 @@
+## 0.7.11
+- Fix: `esphome_list_devices` leest nu configs uit `/config/esphome/*.yaml` i.p.v. HTTP API — ESPHome redirect `/devices` altijd naar `/login` (checkt poort, niet header)
+
 ## 0.7.10
-- Fix: ESPHome plugin stuurde `Authorization: Bearer SUPERVISOR_TOKEN` maar ESPHome gebruikt eigen auth — vervangen door `X-HA-Ingress: true` header voor auth bypass
+- Fix: ESPHome plugin stuurde `Authorization: Bearer SUPERVISOR_TOKEN` maar ESPHome gebruikt eigen auth — vervangen door `X-HA-Ingress: true` header (bleek niet voldoende)
 
 ## 0.7.9
 - Refactor: `grafana_add_panel` vereenvoudigd — geen auto-build meer, query verplicht meegeven
