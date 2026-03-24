@@ -62,6 +62,16 @@ class Zigbee2MQTTPlugin(BasePlugin):
             except Exception as e:
                 return {"error": str(e)}
 
+        def _parse_payload(payload) -> dict:
+            if isinstance(payload, dict):
+                return payload
+            if isinstance(payload, str):
+                try:
+                    return json.loads(payload)
+                except Exception:
+                    return {}
+            return {}
+
         def _bridge_request(action: str, payload: dict = None) -> dict:
             return _mqtt_publish(f"{base_topic}/bridge/request/{action}", payload or {})
 
@@ -165,7 +175,7 @@ class Zigbee2MQTTPlugin(BasePlugin):
                 friendly_name: Device name as configured in Z2M.
                 payload:       Command, e.g. {'state': 'ON'} or {'brightness': 128, 'color_temp': 300}.
             """
-            return _mqtt_publish(f"{base_topic}/{friendly_name}/set", payload)
+            return _mqtt_publish(f"{base_topic}/{friendly_name}/set", _parse_payload(payload))
 
         @mcp.tool()
         def z2m_device_get(friendly_name: str) -> dict:
@@ -217,7 +227,7 @@ class Zigbee2MQTTPlugin(BasePlugin):
                 friendly_name: Group name as configured in Z2M.
                 payload:       Command, e.g. {'state': 'OFF'}.
             """
-            return _mqtt_publish(f"{base_topic}/{friendly_name}/set", payload)
+            return _mqtt_publish(f"{base_topic}/{friendly_name}/set", _parse_payload(payload))
 
         @mcp.tool()
         def z2m_list_groups() -> dict:

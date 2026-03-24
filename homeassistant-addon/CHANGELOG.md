@@ -1,3 +1,6 @@
+## 0.7.3
+- Fix: `z2m_device_set` en `z2m_group_set` — payload werd als JSON string doorgegeven door MCP, nu geparsed via `_parse_payload()`
+
 ## 0.7.2
 - Fix: Z2M health/bridge_info gebruikten verkeerde entity namen — gecorrigeerd naar `binary_sensor.zigbee2mqtt_bridge_connection_state` etc. (gevonden via ha_search_entities)
 - Fix: `z2m_permit_join` gebruikt nu `switch.zigbee2mqtt_bridge_permit_join` HA entity (eenvoudiger dan MQTT), MQTT als fallback voor specifieke router/duration
