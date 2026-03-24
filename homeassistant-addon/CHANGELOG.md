@@ -1,3 +1,13 @@
+## 0.7.4
+- Herschreven: Z2M plugin gefocust op afgesproken scope
+- Verwijderd: `z2m_device_set`, `z2m_device_get`, `z2m_get_device`, `z2m_list_devices`, `z2m_group_set`, `z2m_list_groups`, `z2m_bridge_config` (gebruik HA tools voor device control)
+- Toegevoegd: `z2m_interview_device` — herinterviewen van een slecht herkend device
+- Toegevoegd: `z2m_health_check` + `z2m_coordinator_check` — bridge en coordinator diagnostiek
+- Toegevoegd: `z2m_network_map` — Zigbee netwerktopologie scan (resultaat in Z2M frontend)
+- Toegevoegd: `z2m_lqi_overview` — signaalsterkte per device via HA linkquality entities
+- Toegevoegd: `z2m_ota_check` + `z2m_ota_update` — firmware updates via OTA
+- Toegevoegd: `z2m_bind` + `z2m_unbind` — directe Zigbee bindings tussen devices
+
 ## 0.7.3
 - Fix: `z2m_device_set` en `z2m_group_set` — payload werd als JSON string doorgegeven door MCP, nu geparsed via `_parse_payload()`
 
