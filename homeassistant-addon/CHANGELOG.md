@@ -1,3 +1,8 @@
+## 0.7.2
+- Fix: Z2M health/bridge_info gebruikten verkeerde entity namen — gecorrigeerd naar `binary_sensor.zigbee2mqtt_bridge_connection_state` etc. (gevonden via ha_search_entities)
+- Fix: `z2m_permit_join` gebruikt nu `switch.zigbee2mqtt_bridge_permit_join` HA entity (eenvoudiger dan MQTT), MQTT als fallback voor specifieke router/duration
+- `z2m_bridge_info` toont nu connection, version, permit_join en log_level
+
 ## 0.7.1
 - Fix: Z2M plugin gebruikte verkeerde HA base URL (`http://supervisor/core/api` → `http://homeassistant:8123/api`)
 - Fix: token-volgorde aangepast — `HA_REST_TOKEN` eerst (zelfde als HA plugin)

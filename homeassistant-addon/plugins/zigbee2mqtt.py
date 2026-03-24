@@ -70,32 +70,33 @@ class Zigbee2MQTTPlugin(BasePlugin):
         @mcp.tool()
         def z2m_health() -> dict:
             """Check Zigbee2MQTT bridge status via HA entity state."""
-            state = _get_state("sensor.zigbee2mqtt_bridge_state")
-            if "error" not in state:
+            conn = _get_state("binary_sensor.zigbee2mqtt_bridge_connection_state")
+            if "error" not in conn:
                 return {
-                    "connected": state.get("state") == "online",
-                    "state": state.get("state"),
-                    "attributes": state.get("attributes", {}),
+                    "connected": conn.get("state") == "on",
+                    "state": conn.get("state"),
+                    "attributes": conn.get("attributes", {}),
                 }
-            return state
+            return conn
 
         @mcp.tool()
         def z2m_bridge_info() -> dict:
             """
-            Get Z2M bridge info (version, coordinator, channel) from HA entities.
-            Device states and info are available via HA entities created by Z2M.
+            Get Z2M bridge info (version, connection, permit_join) from HA entities.
             """
             result = {}
-            for entity in ["sensor.zigbee2mqtt_bridge_state", "sensor.zigbee2mqtt_bridge_version"]:
-                s = _get_state(entity)
+            entities = {
+                "connection": "binary_sensor.zigbee2mqtt_bridge_connection_state",
+                "version": "sensor.zigbee2mqtt_bridge_version",
+                "permit_join": "switch.zigbee2mqtt_bridge_permit_join",
+                "log_level": "select.zigbee2mqtt_bridge_log_level",
+            }
+            for key, entity_id in entities.items():
+                s = _get_state(entity_id)
                 if "error" not in s:
-                    key = entity.split(".")[-1].replace("zigbee2mqtt_bridge_", "")
-                    result[key] = {"state": s.get("state"), **s.get("attributes", {})}
+                    result[key] = s.get("state")
             if not result:
-                return {
-                    "error": "No Z2M bridge entities found in HA.",
-                    "hint": "Check entity names in Developer Tools → States (search 'zigbee2mqtt').",
-                }
+                return {"error": "No Z2M bridge entities found in HA."}
             return result
 
         @mcp.tool()
@@ -113,9 +114,26 @@ class Zigbee2MQTTPlugin(BasePlugin):
 
             Args:
                 permit:   True = allow new devices to join, False = block joining.
-                device:   Optional: only allow joining via a specific router device.
-                duration: Seconds to allow joining (default 254).
+                device:   Optional: only allow joining via a specific router device (MQTT).
+                duration: Seconds to allow joining (default 254, only via MQTT path).
             """
+            # If no specific device/duration, use the HA switch (simplest)
+            if not device and duration == 254:
+                service = "turn_on" if permit else "turn_off"
+                try:
+                    r = httpx.post(
+                        f"{ha_api}/services/switch/{service}",
+                        headers=_ha_headers(),
+                        json={"entity_id": "switch.zigbee2mqtt_bridge_permit_join"},
+                        timeout=10,
+                    )
+                    if r.is_success:
+                        status = "ingeschakeld" if permit else "uitgeschakeld"
+                        return {"ok": True, "message": f"Pairing {status}."}
+                    return {"error": f"HTTP {r.status_code}", "detail": r.text[:200]}
+                except Exception as e:
+                    return {"error": str(e)}
+            # Advanced: specific device or duration → MQTT
             payload: dict = {"value": permit, "time": duration}
             if device:
                 payload["device"] = device
