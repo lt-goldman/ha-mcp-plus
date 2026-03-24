@@ -23,23 +23,15 @@ class Zigbee2MQTTPlugin(BasePlugin):
     CONFIG_KEY    = "z2m_token"
 
     def register_tools(self, mcp, cfg: PluginConfig) -> None:
-        ha_api    = "http://supervisor/core/api"
+        ha_api     = "http://homeassistant:8123/api"
         base_topic = "zigbee2mqtt"
 
         def _ha_token() -> str:
-            for t in [os.environ.get("SUPERVISOR_TOKEN"), os.environ.get("HASSIO_TOKEN")]:
+            for key in ("HA_REST_TOKEN", "SUPERVISOR_TOKEN", "HASSIO_TOKEN", "HA_TOKEN"):
+                t = os.environ.get(key, "")
                 if t:
                     return t
-            try:
-                with open("/proc/1/environ", "rb") as f:
-                    for part in f.read().split(b"\x00"):
-                        if part.startswith(b"SUPERVISOR_TOKEN="):
-                            t = part.split(b"=", 1)[1].decode().strip()
-                            if t:
-                                return t
-            except Exception:
-                pass
-            return cfg.extra.get("ha_token", "") or os.environ.get("HA_REST_TOKEN", "")
+            return cfg.extra.get("ha_token", "")
 
         def _ha_headers() -> dict:
             return {"Authorization": f"Bearer {_ha_token()}", "Content-Type": "application/json"}

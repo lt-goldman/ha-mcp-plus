@@ -1,3 +1,7 @@
+## 0.7.1
+- Fix: Z2M plugin gebruikte verkeerde HA base URL (`http://supervisor/core/api` → `http://homeassistant:8123/api`)
+- Fix: token-volgorde aangepast — `HA_REST_TOKEN` eerst (zelfde als HA plugin)
+
 ## 0.7.0
 - Herschreven: Zigbee2MQTT plugin gebruikt nu MQTT via HA (`mqtt.publish` service) i.p.v. HTTP REST
 - Z2M heeft geen REST API — alle commando's gaan via MQTT topics (`zigbee2mqtt/...`)
