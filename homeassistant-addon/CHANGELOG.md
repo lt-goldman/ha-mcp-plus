@@ -1,3 +1,12 @@
+## 0.7.17
+- Fix: `ha_set_dashboard` gebruikte niet-bestaand REST endpoint (`/api/lovelace/config?config_key=...`) — vervangen door WebSocket `lovelace/config/save`
+
+## 0.7.16
+- Fix: `ha_render_template` gaf JSON-parse fout omdat HA platte tekst teruggeeft — eigen httpx-aanroep toegevoegd die tekst correct retourneert
+- Fix: `ha_list_dashboards` gebruikte niet-bestaand REST endpoint `/api/lovelace/dashboards` — vervangen door WebSocket `lovelace/dashboards`
+- Fix: `ha_get_dashboard` gebruikte verkeerde REST parameter `?config_key=` — vervangen door WebSocket `lovelace/config` met correcte `url_path`
+- Fix: `ha_list_areas` gebruikte niet-bestaand REST endpoint `/api/config/area_registry` — vervangen door WebSocket `config/area_registry/list`
+
 ## 0.7.15
 - Fix: Frigate plugin verbindt nu direct met de echte Frigate backend (`options.server` uit de proxy-addon config) i.p.v. via de nginx proxy die auth blokkeert
 - Nieuw: `BasePlugin.get_url_override()` hook voor proxy-addons die de backend URL in hun config hebben
