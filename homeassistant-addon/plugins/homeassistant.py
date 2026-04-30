@@ -306,10 +306,18 @@ class HomeAssistantPlugin(BasePlugin):
             Args:
                 template: e.g. '{{ states("sensor.temp") }}'.
             """
-            result = _post("/template", {"template": template})
-            if isinstance(result, dict):
-                return result
-            return {"result": result}
+            try:
+                r = httpx.post(
+                    f"{url}/api/template",
+                    headers=_headers(),
+                    json={"template": template},
+                    timeout=15,
+                )
+                if not r.is_success:
+                    return {"error": f"HTTP {r.status_code}", "detail": r.text[:300]}
+                return {"result": r.text}
+            except Exception as e:
+                return {"error": str(e)}
 
         @mcp.tool()
         def ha_get_config() -> dict:
@@ -450,9 +458,12 @@ class HomeAssistantPlugin(BasePlugin):
         @mcp.tool()
         def ha_list_areas() -> dict:
             """List all areas in the area registry."""
-            areas = _get("/config/area_registry")
-            if isinstance(areas, dict):
+            from core.websocket import ha_ws_call
+            areas = ha_ws_call(token, url, {"type": "config/area_registry/list"})
+            if isinstance(areas, dict) and "error" in areas:
                 return areas
+            if not isinstance(areas, list):
+                return {"error": "Unexpected response", "detail": str(areas)}
             return {
                 "count": len(areas),
                 "areas": [
@@ -679,7 +690,13 @@ class HomeAssistantPlugin(BasePlugin):
         @mcp.tool()
         def ha_list_dashboards() -> dict:
             """List all Lovelace dashboards."""
-            return _get("/lovelace/dashboards")
+            from core.websocket import ha_ws_call
+            result = ha_ws_call(token, url, {"type": "lovelace/dashboards"})
+            if isinstance(result, dict) and "error" in result:
+                return result
+            if not isinstance(result, list):
+                return {"error": "Unexpected response", "detail": str(result)}
+            return {"count": len(result), "dashboards": result}
 
         @mcp.tool()
         def ha_get_dashboard(dashboard_id: str = "") -> dict:
@@ -690,8 +707,11 @@ class HomeAssistantPlugin(BasePlugin):
                 dashboard_id: Dashboard slug (e.g. 'my-dashboard').
                               Empty = default dashboard.
             """
-            path = f"/lovelace/config?config_key={dashboard_id}" if dashboard_id else "/lovelace/config"
-            return _get(path)
+            from core.websocket import ha_ws_call
+            cmd = {"type": "lovelace/config"}
+            if dashboard_id:
+                cmd["url_path"] = dashboard_id
+            return ha_ws_call(token, url, cmd)
 
         @mcp.tool()
         def ha_set_dashboard(config: dict, dashboard_id: str = "") -> dict:
