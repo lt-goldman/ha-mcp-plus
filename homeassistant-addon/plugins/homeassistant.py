@@ -724,8 +724,11 @@ class HomeAssistantPlugin(BasePlugin):
                 config:       Full Lovelace config as dict.
                 dashboard_id: Dashboard slug. Empty = default dashboard.
             """
-            path = f"/lovelace/config?config_key={dashboard_id}" if dashboard_id else "/lovelace/config"
-            return _post(path, config)
+            from core.websocket import ha_ws_call
+            cmd = {"type": "lovelace/config/save", "config": config}
+            if dashboard_id:
+                cmd["url_path"] = dashboard_id
+            return ha_ws_call(token, url, cmd)
 
         # ── CALENDAR ─────────────────────────────────────────────────────────
 
