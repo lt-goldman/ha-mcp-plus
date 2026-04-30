@@ -1,3 +1,6 @@
+## 0.7.18
+- Fix: `ha_set_dashboard` accepteerde geen dict als config parameter (Pydantic validatiefout) — parameter type gewijzigd naar str met interne JSON parse
+
 ## 0.7.17
 - Fix: `ha_set_dashboard` gebruikte niet-bestaand REST endpoint (`/api/lovelace/config?config_key=...`) — vervangen door WebSocket `lovelace/config/save`
 

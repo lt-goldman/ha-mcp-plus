@@ -714,18 +714,23 @@ class HomeAssistantPlugin(BasePlugin):
             return ha_ws_call(token, url, cmd)
 
         @mcp.tool()
-        def ha_set_dashboard(config: dict, dashboard_id: str = "") -> dict:
+        def ha_set_dashboard(config: str, dashboard_id: str = "") -> dict:
             """
             Save a Lovelace dashboard configuration.
 
             WARNING: Overwrites the current dashboard config.
 
             Args:
-                config:       Full Lovelace config as dict.
+                config:       Full Lovelace config as JSON string.
                 dashboard_id: Dashboard slug. Empty = default dashboard.
             """
+            import json as _json
             from core.websocket import ha_ws_call
-            cmd = {"type": "lovelace/config/save", "config": config}
+            try:
+                cfg = _json.loads(config) if isinstance(config, str) else config
+            except Exception as e:
+                return {"error": f"Invalid JSON: {e}"}
+            cmd = {"type": "lovelace/config/save", "config": cfg}
             if dashboard_id:
                 cmd["url_path"] = dashboard_id
             return ha_ws_call(token, url, cmd)
