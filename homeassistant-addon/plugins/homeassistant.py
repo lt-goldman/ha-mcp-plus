@@ -691,7 +691,7 @@ class HomeAssistantPlugin(BasePlugin):
         def ha_list_dashboards() -> dict:
             """List all Lovelace dashboards."""
             from core.websocket import ha_ws_call
-            result = ha_ws_call(token, url, {"type": "lovelace/dashboards"})
+            result = ha_ws_call(token, url, {"type": "lovelace/dashboards/list"})
             if isinstance(result, dict) and "error" in result:
                 return result
             if not isinstance(result, list):

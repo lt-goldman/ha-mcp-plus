@@ -1,3 +1,9 @@
+## 0.8.1
+- Fix: `ha_list_dashboards` gebruikte niet-bestaand WebSocket-commando `lovelace/dashboards`
+  (`{"error":"Unknown command.","code":"unknown_command"}`) — moet `lovelace/dashboards/list`
+  zijn. Live gevonden en bevestigd door de tool na de v0.8.0-fix daadwerkelijk aan te roepen
+  tegen een echte HA-instance in plaats van alleen de startup-log te controleren
+
 ## 0.8.0
 Stabiliteitsronde. Geen enkele wijziging hier is een losse fix voor één integratie
 (zoals de vorige ~20 releases) — het pakt de structurele oorzaken aan waardoor die
