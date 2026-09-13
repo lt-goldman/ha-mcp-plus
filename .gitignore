@@ -1,0 +1,17 @@
+# Secrets
+.env
+secrets.yaml
+credentials.json
+**/options.json
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Editor/OS
+.DS_Store
+Thumbs.db

@@ -10,17 +10,12 @@ auto-discovered from the Supervisor API.
 import json
 import logging
 import os
+import threading
+import time
 import uuid
 
 import uvicorn
-
-try:
-    from fastmcp import FastMCP
-except ImportError:
-    try:
-        from mcp.server.fastmcp import FastMCP
-    except ImportError:
-        from mcp.server.mcpserver import MCPServer as FastMCP
+from fastmcp import FastMCP
 
 import importlib.metadata
 try:
@@ -130,6 +125,27 @@ def _publish_path_to_ha(path: str, port: int) -> None:
         log.warning(f"Could not create notification: {e}")
 
 
+def _notify_ha_critical(title: str, message: str) -> None:
+    """Best-effort persistent notification in the HA UI for failures that
+    would otherwise only be visible in the addon log."""
+    token = os.environ.get("SUPERVISOR_TOKEN", "")
+    if not token:
+        return
+    try:
+        httpx.post(
+            "http://supervisor/core/api/services/persistent_notification/create",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={
+                "notification_id": "ha_mcp_plus_error",
+                "title": title,
+                "message": message,
+            },
+            timeout=5,
+        )
+    except Exception as e:
+        log.warning(f"Could not create error notification: {e}")
+
+
 def _write_path_to_addon_options(path: str, options: dict) -> None:
     """Attempt to write the generated path to addon options via Supervisor API."""
     token = os.environ.get("SUPERVISOR_TOKEN", "")
@@ -192,6 +208,38 @@ def resolve_secret_path(options: dict, port: int) -> str:
     raise SystemExit(0)
 
 
+# ── Periodic re-discovery ─────────────────────────────────────
+
+_DISCOVERY_INTERVAL_SECONDS = 120
+
+
+def _plugin_discovery_watchdog(mcp, options: dict, active_plugins: dict) -> None:
+    """Re-run addon discovery periodically and register any plugin whose
+    addon was not yet running at startup but has since come online.
+
+    Never removes/re-registers an already-active plugin — FastMCP tools are
+    additive, and re-registering the same tool names is not something we need
+    to handle since the discovered addon set only grows during a run.
+    """
+    while True:
+        time.sleep(_DISCOVERY_INTERVAL_SECONDS)
+        try:
+            found = discover_and_load_plugins(options)
+        except Exception as e:
+            log.warning(f"[discovery-watchdog] re-run failed, will retry: {e}")
+            continue
+
+        for name, (instance, cfg) in found.items():
+            if name in active_plugins:
+                continue
+            try:
+                instance.register_tools(mcp, cfg)
+                active_plugins[name] = (instance, cfg)
+                log.info(f"[discovery-watchdog] '{name}' came online — tools registered")
+            except Exception as e:
+                log.error(f"[discovery-watchdog] Failed to register newly discovered plugin '{name}': {e}")
+
+
 # ── Main ──────────────────────────────────────────────────────
 
 def main():
@@ -210,13 +258,18 @@ def main():
     log.info("=" * 60)
 
     # Discover which addons are running and activate plugins
-    active_plugins = discover_and_load_plugins(options)
+    try:
+        active_plugins = discover_and_load_plugins(options)
+    except Exception as e:
+        # Discovery is best-effort (Supervisor API can be briefly unreachable
+        # right after boot). The core plugins below don't depend on it —
+        # don't let a discovery hiccup take the whole server down with it.
+        log.error(f"Addon discovery failed, continuing without addon-backed plugins: {e}")
+        active_plugins = {}
     if not active_plugins:
         log.warning("No active plugins found. Is any supported addon running?")
 
     plugin_list = ", ".join(active_plugins.keys()) or "none"
-    # Stateless mode: no server-side sessions — each request is independent.
-    # Prevents "Session not found" errors after addon restarts or inactivity.
     instructions = f"""
 Extended Home Assistant MCP server.
 Active plugins: {plugin_list}
@@ -228,48 +281,43 @@ Always ask for user confirmation before writing files, deploying flows, or makin
 changes that cannot be undone.
     """.strip()
 
-    try:
-        mcp = FastMCP("ha-mcp-plus", stateless_http=True, instructions=instructions)
-        log.info("Session mode: stateless (no session expiry)")
-    except TypeError:
-        # Older FastMCP without stateless_http support
-        mcp = FastMCP("ha-mcp-plus", instructions=instructions)
-        log.warning("Session mode: stateful (stateless_http not supported by this FastMCP version)")
+    mcp = FastMCP("ha-mcp-plus", instructions=instructions)
 
-    # Register tools from each active plugin
+    # Register tools from each addon-backed plugin found at startup
     for name, (instance, cfg) in active_plugins.items():
         log.info(f"Registering tools: {name}")
         instance.register_tools(mcp, cfg)
 
-    # Filesystem tools (always active)
-    try:
-        from plugins.filesystem import FilesystemPlugin
-        fs_plugin = FilesystemPlugin()
-        fs_cfg = PluginConfig(url="", token="", extra={"config_path": "/config"})
-        fs_plugin.register_tools(mcp, fs_cfg)
-        log.info("Registering tools: Filesystem (always active)")
-    except Exception as e:
-        log.warning(f"Could not load filesystem plugin: {e}")
-
-    # Core HA tools (always active)
-    try:
-        from plugins.homeassistant import HomeAssistantPlugin
-        ha_plugin = HomeAssistantPlugin()
-        ha_cfg = PluginConfig(url="", token="", extra=options)
-        ha_plugin.register_tools(mcp, ha_cfg)
-        log.info("Registering tools: HomeAssistant (always active)")
-    except Exception as e:
-        log.warning(f"Could not load homeassistant plugin: {e}")
-
-    # Supervisor tools (always active)
-    try:
-        from plugins.supervisor import SupervisorPlugin
-        sup_plugin = SupervisorPlugin()
-        sup_cfg = PluginConfig(url="", token="", extra=options)
-        sup_plugin.register_tools(mcp, sup_cfg)
-        log.info("Registering tools: Supervisor (always active)")
-    except Exception as e:
-        log.warning(f"Could not load supervisor plugin: {e}")
+    # Core plugins (Filesystem, HomeAssistant, Supervisor) are always active —
+    # without them the server has nothing useful to offer. A failure here used
+    # to be swallowed (log.warning + continue), which left the MCP server running
+    # with silently missing tool groups: from the client side that looks exactly
+    # like "it just doesn't do anything", with no error to react to. Fail loudly
+    # instead, notify in the HA UI, and let the addon watchdog restart us —
+    # config.yaml sets a `watchdog:` URL for this reason.
+    core_plugins = [
+        ("Filesystem", "plugins.filesystem", "FilesystemPlugin",
+         PluginConfig(url="", token="", extra={"config_path": "/config"})),
+        ("HomeAssistant", "plugins.homeassistant", "HomeAssistantPlugin",
+         PluginConfig(url="", token="", extra=options)),
+        ("Supervisor", "plugins.supervisor", "SupervisorPlugin",
+         PluginConfig(url="", token="", extra=options)),
+    ]
+    for name, module_path, class_name, cfg in core_plugins:
+        try:
+            module = __import__(module_path, fromlist=[class_name])
+            plugin_cls = getattr(module, class_name)
+            plugin_cls().register_tools(mcp, cfg)
+            log.info(f"Registering tools: {name} (core, always active)")
+        except Exception as e:
+            log.critical(f"Core plugin '{name}' failed to load — server has no usable tools: {e}")
+            _notify_ha_critical(
+                "HA MCP Plus — startfout",
+                f"Kernplugin '{name}' kon niet laden: {e}\n\n"
+                f"De addon herstart automatisch (watchdog). Blijft dit terugkomen, "
+                f"controleer het addon-log.",
+            )
+            raise
 
     # Python sandbox (only when explicitly enabled)
     if sandbox_enabled:
@@ -288,7 +336,23 @@ changes that cannot be undone.
     else:
         log.info("Sandbox disabled (set sandbox_enabled: true to enable)")
 
-    app = mcp.http_app(path=path)
+    # Stateless mode: no server-side sessions — each request is independent.
+    # Prevents "Session not found" errors after addon restarts or inactivity.
+    # (Passed to http_app, not the FastMCP constructor — that usage is
+    # deprecated as of fastmcp 2.x and can disappear in a future release.)
+    app = mcp.http_app(path=path, stateless_http=True)
+
+    # Addon-backed plugins (Z2M, InfluxDB, Grafana, ...) are discovered once
+    # above. If their addon wasn't fully started yet at that point — a common
+    # race on a full HA reboot — they were skipped for the rest of this
+    # process' life. Recheck periodically and register anything that has come
+    # online since, without needing an addon restart.
+    watchdog = threading.Thread(
+        target=_plugin_discovery_watchdog,
+        args=(mcp, options, active_plugins),
+        daemon=True,
+    )
+    watchdog.start()
 
     log.info(f"Starting MCP server — {len(active_plugins)} plugin(s) active")
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")

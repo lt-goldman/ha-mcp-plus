@@ -111,6 +111,24 @@ That's it — the plugin is automatically discovered and loaded.
 
 ---
 
+## Development
+
+```bash
+cd homeassistant-addon
+python -m pip install -r requirements-dev.txt
+python -m pytest
+```
+
+CI runs the same suite on every push/PR ([.github/workflows/ci.yml](.github/workflows/ci.yml)). The
+`test_plugin_imports.py` smoke test in particular exists to catch a class of bug this
+project has hit before: a module imports a package that isn't declared in
+`requirements.txt`, works locally by accident (already installed some other way), then
+breaks on a clean install. `requirements.txt` pins exact versions for the same reason —
+an unpinned dependency bumping itself on a Docker rebuild has caused a real regression
+here before (the "Session not found" issue in v0.6.1).
+
+---
+
 ## License
 
 MIT — built on top of [ha-mcp](https://github.com/homeassistant-ai/ha-mcp) (also MIT).

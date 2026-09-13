@@ -1,3 +1,42 @@
+## 0.8.0
+Stabiliteitsronde. Geen enkele wijziging hier is een losse fix voor één integratie
+(zoals de vorige ~20 releases) — het pakt de structurele oorzaken aan waardoor die
+fixes steeds opnieuw nodig waren.
+
+- Fix: `websocket-client` (het `import websocket`-pakket) stond nooit in
+  `requirements.txt`. Bij een schone install ontbrak de module, waardoor
+  `plugins/musicassistant.py` niet kon laden en (vóór deze fix) de hele addon liet
+  crashen bij het opstarten — en `ha_list_dashboards`, `ha_get_dashboard`,
+  `ha_list_areas`, `ha_set_dashboard` altijd faalden zodra ze werden aangeroepen,
+  ongeacht hoe correct de WebSocket-aanroep zelf was (zie 0.7.16/0.7.17)
+- Fix: `requests` (gebruikt in de gegenereerde sandbox-preamble) stond ook niet in
+  `requirements.txt` — elke `python_sandbox`-aanroep crashte met `ModuleNotFoundError`
+  zodra `sandbox_enabled: true` stond
+- Fix: `mcp`, `fastmcp`, `httpx`, `pyyaml` zijn nu exact gepind i.p.v. `>=` — een
+  Docker-rebuild kon tot nu toe een nieuwere library-versie binnenhalen die stilletjes
+  ander gedrag geeft (precies hoe de "Session not found"-bug in 0.6.1 ontstond)
+- Fix: `stateless_http=True` wordt nu aan `mcp.http_app()` doorgegeven i.p.v. aan de
+  `FastMCP()`-constructor — die laatste vorm is deprecated in fastmcp 2.x en kan in een
+  toekomstige release zonder waarschuwing verdwijnen, wat de "Session not found"-klasse
+  bug zou laten terugkomen
+- Fix: de drie kernplugins (Filesystem, HomeAssistant, Supervisor) faalden voorheen
+  stil (`log.warning` + doorgaan) als hun registratie een fout gaf — de MCP-server
+  bleef dan draaien met tools die er gewoon niet waren, zonder foutmelding om op te
+  reageren. Faalt nu hard, met een persistent notification in de HA-UI, en de addon
+  herstart via de nieuwe `watchdog:`-instelling in `config.yaml`
+- Nieuw: `discover_and_load_plugins()` draaide voorheen precies één keer, bij het
+  opstarten van de addon. Een addon (Z2M, InfluxDB, Grafana, Frigate, Node-RED) die
+  bij een HA-herstart nog niet volledig op was op dat moment, werd voorgoed
+  overgeslagen tot de volgende addon-restart. Draait nu elke 2 minuten opnieuw en
+  registreert alles wat inmiddels online is gekomen, zonder herstart nodig te hebben
+- Fix: één kapotte plugin-module (ontbrekende dependency, syntaxfout) kon voorheen via
+  `load_all_plugins()` alle andere plugins meeslepen — wordt nu per module gevangen en
+  overgeslagen
+- Nieuw: testsuite (`tests/`, pytest) + GitHub Actions CI op elke push/PR. De
+  belangrijkste test importeert elke plugin-module tegen de gepinde requirements —
+  precies het soort controle dat de `websocket-client`-bug vóór een release had
+  gevangen in plaats van erna
+
 ## 0.7.18
 - Fix: `ha_set_dashboard` accepteerde geen dict als config parameter (Pydantic validatiefout) — parameter type gewijzigd naar str met interne JSON parse
 

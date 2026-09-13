@@ -1,4 +1,20 @@
-mcp[cli]>=1.5.0
-fastmcp>=2.0.0
-httpx>=0.27.0
-pyyaml>=6.0
+# Exact gepind (v0.8.0) — voorheen ongepind, waardoor elke Docker-rebuild een
+# andere library-versie kon binnenhalen (o.a. de "Session not found"-regressie
+# in v0.6.1 kwam hierdoor). Bij een gewenste upgrade: bump bewust, test tegen
+# een echte HA-instance, dan pas de pin aanpassen.
+mcp[cli]==1.30.0
+fastmcp==2.14.7
+httpx==0.28.1
+pyyaml==6.0.3
+uvicorn==0.52.4
+
+# Direct gebruikt door core/websocket.py en plugins/musicassistant.py
+# (import websocket) — stond hier nooit in, waardoor die module bij een
+# schone install ontbrak en elke tool die 'm gebruikt (ha_list_dashboards,
+# ha_get_dashboard, ha_list_areas, ha_set_dashboard, Music Assistant) crashte.
+websocket-client==1.9.2
+
+# Direct gebruikt door de gegenereerde sandbox-preamble (plugins/sandbox.py)
+# — alleen relevant als sandbox_enabled: true, maar dan wel op elke aanroep
+# een hard ImportError zonder deze pin.
+requests==2.32.5

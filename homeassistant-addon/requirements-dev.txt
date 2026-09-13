@@ -1,0 +1,3 @@
+# Alleen voor tests/CI — komt niet in het Docker-image terecht.
+-r requirements.txt
+pytest==9.1.1

@@ -155,7 +155,13 @@ def load_all_plugins() -> List[Type[BasePlugin]]:
 
     classes = []
     for _, module_name, _ in pkgutil.iter_modules(plugins_pkg.__path__):
-        module = importlib.import_module(f"plugins.{module_name}")
+        try:
+            module = importlib.import_module(f"plugins.{module_name}")
+        except Exception as e:
+            # A single broken plugin module (e.g. a missing dependency) must
+            # not take every other plugin down with it — skip and keep going.
+            log.error(f"Could not import plugins.{module_name}, skipping this plugin: {e}")
+            continue
         for name, obj in inspect.getmembers(module, inspect.isclass):
             if (
                 issubclass(obj, BasePlugin)
